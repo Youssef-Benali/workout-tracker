@@ -779,6 +779,185 @@ async function main() {
     );
   });
 
+  await scenario("Notes autosave per day, fold, focus and survive a reload", async ({ page }) => {
+    const today = await localToday(page);
+    await page.evaluate((dateString) => {
+      localStorage.setItem(
+        "wt.v1.sessions",
+        JSON.stringify([
+          {
+            id: "notes-session",
+            date: dateString,
+            title: "Upper",
+            exercises: [
+              { n: "Bench", sets: [{ r: 8, w: 67.5, t: "18:00" }] }
+            ]
+          }
+        ])
+      );
+      location.hash = "#log";
+    }, today);
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.waitForSelector(".screen-calendar");
+
+    assert.equal(await page.evaluate(() => localStorage.getItem("notes")), null);
+
+    const card = page.locator(".note-card");
+    const header = card.locator(".note-head");
+    const body = card.locator(".note-body");
+    const textarea = card.locator(".note-input");
+    const written = card.locator(".note-written");
+    assert.equal(await card.count(), 1);
+    assert.equal(sanitize(await card.locator(".note-title").textContent()), "Notes");
+
+    const months = [
+      "January", "February", "March", "April", "May", "June", "July",
+      "August", "September", "October", "November", "December"
+    ];
+    const dateParts = today.split("-").map(Number);
+    const expectedDate = `${dateParts[2]} ${months[dateParts[1] - 1]}`;
+    assert.equal(sanitize(await card.locator(".note-date").textContent()), expectedDate);
+
+    const placement = await page.evaluate(() => {
+      const list = document.querySelector(".session-list");
+      const note = document.querySelector(".note-card");
+      return {
+        follows:
+          (list.compareDocumentPosition(note) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0,
+        noteTop: note.getBoundingClientRect().top,
+        listBottom: list.getBoundingClientRect().bottom
+      };
+    });
+    assert.equal(placement.follows, true);
+    assert.ok(placement.noteTop >= placement.listBottom);
+
+    assert.equal(await header.getAttribute("aria-expanded"), "false");
+    assert.equal(await body.isVisible(), false);
+    assert.equal(await written.count(), 1);
+    assert.equal(await written.isVisible(), false);
+
+    const inputMetrics = await textarea.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return {
+        minHeight: style.minHeight,
+        resize: style.resize,
+        fontSize: style.fontSize,
+        borderRadius: style.borderRadius,
+        background: style.backgroundColor,
+        placeholder: element.getAttribute("placeholder")
+      };
+    });
+    assert.equal(inputMetrics.minHeight, "96px");
+    assert.equal(inputMetrics.resize, "none");
+    assert.equal(inputMetrics.fontSize, "16px");
+    assert.notEqual(inputMetrics.borderRadius, "0px");
+    assert.notEqual(inputMetrics.background, "rgba(0, 0, 0, 0)");
+    assert.equal(
+      inputMetrics.placeholder,
+      "How did you feel about your training today? Was it great?"
+    );
+
+    await header.click();
+    assert.equal(await header.getAttribute("aria-expanded"), "true");
+    assert.equal(await body.isVisible(), true);
+    assert.equal(
+      await page.evaluate(
+        () => document.activeElement === document.querySelector(".note-input")
+      ),
+      true
+    );
+
+    await textarea.fill("Felt strong on bench today.");
+    assert.deepEqual(await readStore(page, "notes"), {
+      [today]: "Felt strong on bench today."
+    });
+    assert.equal(await written.isVisible(), true);
+    assert.equal(sanitize(await written.textContent()), "Written");
+
+    const oneLineHeight = await textarea.evaluate(
+      (element) => element.getBoundingClientRect().height
+    );
+    await textarea.fill(`${"Felt good. ".repeat(30)}\nEnd of note.`);
+    const grownHeight = await textarea.evaluate(
+      (element) => element.getBoundingClientRect().height
+    );
+    assert.ok(grownHeight > oneLineHeight, "The note textarea should auto-grow");
+    await textarea.fill("Felt strong on bench today.");
+
+    await header.click();
+    assert.equal(await header.getAttribute("aria-expanded"), "false");
+    assert.equal(await body.isVisible(), false);
+    assert.equal(await written.isVisible(), true);
+    await header.click();
+    assert.equal(await header.getAttribute("aria-expanded"), "true");
+    assert.equal(await body.isVisible(), true);
+
+    const untrained = page.locator(".day:not(.is-blank):not(.is-trained)").first();
+    await untrained.click();
+    await page.waitForTimeout(20);
+    assert.equal(await card.count(), 1);
+    assert.equal(await header.getAttribute("aria-expanded"), "false");
+    assert.equal(await body.isVisible(), false);
+    assert.equal(await written.isVisible(), false);
+    assert.equal(await textarea.inputValue(), "");
+    const otherDate = await card.getAttribute("data-date");
+    assert.notEqual(otherDate, today);
+    assert.notEqual(
+      sanitize(await card.locator(".note-date").textContent()),
+      expectedDate
+    );
+
+    await header.click();
+    await textarea.fill("Easy session, good sleep.");
+    const twoNotes = await readStore(page, "notes");
+    assert.equal(Object.keys(twoNotes).length, 2);
+    assert.equal(twoNotes[today], "Felt strong on bench today.");
+    assert.equal(twoNotes[otherDate], "Easy session, good sleep.");
+
+    await page.locator(".day.is-today").click();
+    await page.waitForTimeout(20);
+    assert.equal(await header.getAttribute("aria-expanded"), "false");
+    assert.equal(await written.isVisible(), true);
+    await header.click();
+    assert.equal(await textarea.inputValue(), "Felt strong on bench today.");
+
+    await page.getByLabel("Previous month").click();
+    await page.waitForTimeout(20);
+    assert.equal(await header.getAttribute("aria-expanded"), "false");
+    assert.equal(await written.isVisible(), false);
+    assert.equal(await textarea.inputValue(), "");
+    await page.getByLabel("Next month").click();
+    await page.waitForTimeout(20);
+    assert.equal(await header.getAttribute("aria-expanded"), "false");
+    assert.equal(await written.isVisible(), true);
+    await header.click();
+    assert.equal(await textarea.inputValue(), "Felt strong on bench today.");
+
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.waitForSelector(".screen-calendar");
+    assert.equal(await header.getAttribute("aria-expanded"), "false");
+    assert.equal(await written.isVisible(), true);
+    await header.click();
+    assert.equal(await textarea.inputValue(), "Felt strong on bench today.");
+
+    await textarea.fill("");
+    assert.deepEqual(await readStore(page, "notes"), {
+      [otherDate]: "Easy session, good sleep."
+    });
+    assert.equal(await written.isVisible(), false);
+
+    await page.locator(".day:not(.is-blank):not(.is-trained)").first().click();
+    await page.waitForTimeout(20);
+    await header.click();
+    assert.equal(await textarea.inputValue(), "Easy session, good sleep.");
+    await textarea.fill("");
+    assert.equal(await page.evaluate(() => localStorage.getItem("notes")), null);
+
+    const sessions = await readStore(page, "wt.v1.sessions");
+    assert.equal(sessions.length, 1);
+    assert.equal(sessions[0].id, "notes-session");
+  });
+
   await scenario("Screen Wake Lock is requested while active and released", async ({ page }) => {
     await startUpperFromList(page);
     await page.addInitScript(() => {
@@ -1326,7 +1505,7 @@ async function main() {
     assert.equal(/\b(?:alert|confirm|prompt)\s*\(/.test(appSource), false);
     assert.ok(appSource.includes('"wt.v1.programs"'));
     const swSource = fs.readFileSync(path.join(ROOT, "sw.js"), "utf8");
-    assert.match(swSource, /const CACHE_VERSION = "wt-v1";/);
+    assert.match(swSource, /const CACHE_VERSION = "wt-v2";/);
     assert.match(swSource, /skipWaiting/);
     assert.match(swSource, /clients\.claim/);
     assert.match(swSource, /caches\.delete/);

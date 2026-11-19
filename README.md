@@ -21,6 +21,8 @@ step, no framework and no runtime dependencies.
 - **An autosaved active workout** that survives reloads and app restarts.
 - **A Monday-first calendar** with prominent trained days, per-day sessions and
   in-progress workouts counted as today.
+- **Per-day notes** below the selected day, autosaved as you type and folded
+  into a compact card like a session.
 - **Progress sparklines** using best-set weight (or total reps for body-weight
   work) with a delta from the first session.
 - **Automatic dark mode**, reduced-motion support, keyboard reordering and
@@ -111,8 +113,9 @@ screens in both colour schemes to `tests/screenshots/`.
 | `ASSUMPTIONS.md` | Decisions made where the brief leaves room |
 
 All app URLs are relative (`./`) so the same files work at a GitHub Pages
-sub-path. Data is stored in `localStorage` under the `wt.v1.` prefix:
-`wt.v1.programs`, `wt.v1.sessions`, `wt.v1.active` and `wt.v1.settings`.
+sub-path. Data is stored in `localStorage` under the `wt.v1.` prefix —
+`wt.v1.programs`, `wt.v1.sessions`, `wt.v1.active` and `wt.v1.settings` — plus
+the per-day `notes` key, which holds `{ "YYYY-MM-DD": "text" }`.
 
 ## Known limitations
 

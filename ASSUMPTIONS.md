@@ -43,6 +43,7 @@ The product brief is the source of truth. Where it leaves a detail open, this fi
 - The Progress metric is the best logged set weight for weighted exercises. If every logged weight for an exercise is zero, the metric is total reps for each session. An exercise is shown once it has logged sets in at least two sessions.
 - "Best set" is the greatest weight in the session, not the average.
 - A calendar session card shows one weight per exercise: the highest weight logged in that exercise for that session. Its reps line lists the logged reps in set order.
+- Notes are stored separately in the `notes` key as `{ "YYYY-MM-DD": "text" }`, using the same local date format as sessions. Every day can have a note, including days with no session. Blank notes delete that day's entry, and the key is removed once no entries remain. The notes card renders folded after any calendar render, including after changing day or month.
 
 ## Visual and accessibility details
 

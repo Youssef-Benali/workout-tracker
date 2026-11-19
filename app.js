@@ -14,7 +14,8 @@
     programs: "wt.v1.programs",
     sessions: "wt.v1.sessions",
     active: "wt.v1.active",
-    settings: "wt.v1.settings"
+    settings: "wt.v1.settings",
+    notes: "notes"
   });
   const MONTHS = [
     "January",
@@ -594,6 +595,50 @@
 
   function persistSettings() {
     return writeJson(STORAGE_KEYS.settings, settings);
+  }
+
+  function sanitizeNotes(value) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+    const notes = {};
+    Object.keys(value).forEach((date) => {
+      if (!isValidDateString(date)) return;
+      const text = value[date];
+      if (typeof text === "string" && text.trim()) {
+        notes[date] = text;
+      }
+    });
+    return notes;
+  }
+
+  function readNotes() {
+    try {
+      return sanitizeNotes(readJson(STORAGE_KEYS.notes, {}));
+    } catch (error) {
+      return {};
+    }
+  }
+
+  function writeNotes(notes) {
+    try {
+      if (Object.keys(notes).length === 0) {
+        removeStorage(STORAGE_KEYS.notes);
+        return true;
+      }
+      return writeJson(STORAGE_KEYS.notes, notes);
+    } catch (error) {
+      return false;
+    }
+  }
+
+  function saveNote(dateString, text) {
+    if (!isValidDateString(dateString)) return false;
+    const notes = readNotes();
+    if (typeof text === "string" && text.trim()) {
+      notes[dateString] = text;
+    } else {
+      delete notes[dateString];
+    }
+    return writeNotes(notes);
   }
 
   function createSeedPrograms() {
@@ -2667,6 +2712,8 @@
       screen.append(list);
     }
 
+    screen.append(createNotesCard(calendar.selected));
+
     return screen;
   }
 
@@ -2759,6 +2806,79 @@
     });
 
     card.append(header, body);
+    return card;
+  }
+
+  function autoGrowNote(textarea) {
+    textarea.style.height = "auto";
+    textarea.style.height = `${textarea.scrollHeight}px`;
+  }
+
+  function createNotesCard(dateString) {
+    const storedText = readNotes()[dateString] || "";
+    const bodyId = makeId("note-body");
+    const card = el("article", {
+      class: "note-card",
+      dataset: { date: dateString }
+    });
+
+    const header = el("button", {
+      class: "note-head",
+      type: "button",
+      "aria-expanded": "false",
+      "aria-controls": bodyId
+    });
+    const copy = el("span", { class: "note-head-copy" });
+    copy.append(el("span", { class: "note-title", text: "Notes" }));
+    copy.append(
+      el("span", { class: "note-date", text: formatLongDay(dateString) })
+    );
+
+    const written = el("span", {
+      class: "note-written",
+      text: "Written",
+      hidden: !storedText
+    });
+    const tail = el(
+      "span",
+      { class: "note-tail" },
+      written,
+      el(
+        "span",
+        { class: "note-chevron", "aria-hidden": "true" },
+        makeIcon("chevronDown")
+      )
+    );
+    header.append(copy, tail);
+
+    const body = el("div", { class: "note-body", id: bodyId, hidden: true });
+    const textarea = el("textarea", {
+      class: "note-input",
+      rows: "3",
+      placeholder: "How did you feel about your training today? Was it great?",
+      "aria-label": `Note for ${formatFullDateForLabel(dateString)}`,
+      spellcheck: "true"
+    });
+    textarea.value = storedText;
+    body.append(textarea);
+    card.append(header, body);
+
+    textarea.addEventListener("input", () => {
+      saveNote(dateString, textarea.value);
+      written.hidden = textarea.value.trim() === "";
+      autoGrowNote(textarea);
+    });
+
+    header.addEventListener("click", () => {
+      const expanded = header.getAttribute("aria-expanded") === "true";
+      header.setAttribute("aria-expanded", expanded ? "false" : "true");
+      body.hidden = expanded;
+      if (!expanded) {
+        autoGrowNote(textarea);
+        textarea.focus();
+      }
+    });
+
     return card;
   }
 

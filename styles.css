@@ -1442,13 +1442,18 @@ input[type="number"]::-webkit-inner-spin-button {
   margin-top: 16px;
 }
 
-.session-card {
+.session-card,
+.note-card {
   width: 100%;
   overflow: hidden;
   border: 1px solid var(--hairline);
   border-radius: 22px;
   background: var(--card);
   box-shadow: var(--shadow-card);
+}
+
+.note-card {
+  margin-top: 12px;
 }
 
 .session-head {
@@ -1463,11 +1468,40 @@ input[type="number"]::-webkit-inner-spin-button {
   text-align: left;
 }
 
-.session-head-copy {
+.note-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 78px;
+  padding: 15px 16px;
+  color: var(--ink);
+  text-align: left;
+}
+
+.note-tail {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.note-written {
+  color: var(--acc);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.session-head-copy,
+.note-head-copy {
   min-width: 0;
 }
 
-.session-title {
+.session-title,
+.note-title {
   display: block;
   margin: 0 0 4px;
   overflow: hidden;
@@ -1480,7 +1514,8 @@ input[type="number"]::-webkit-inner-spin-button {
   white-space: nowrap;
 }
 
-.session-meta {
+.session-meta,
+.note-date {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -1501,7 +1536,8 @@ input[type="number"]::-webkit-inner-spin-button {
   font-weight: 600;
 }
 
-.session-chevron {
+.session-chevron,
+.note-chevron {
   display: grid;
   place-items: center;
   width: 24px;
@@ -1510,16 +1546,19 @@ input[type="number"]::-webkit-inner-spin-button {
   transition: transform 200ms var(--ease);
 }
 
-.session-chevron svg {
+.session-chevron svg,
+.note-chevron svg {
   width: 19px;
   height: 19px;
 }
 
-.session-head[aria-expanded="true"] .session-chevron {
+.session-head[aria-expanded="true"] .session-chevron,
+.note-head[aria-expanded="true"] .note-chevron {
   transform: rotate(180deg);
 }
 
-.session-body {
+.session-body,
+.note-body {
   padding: 4px 16px 16px;
   border-top: 1px solid var(--hairline);
 }
@@ -1585,6 +1624,37 @@ input[type="number"]::-webkit-inner-spin-button {
   font-weight: 500;
   line-height: 1.45;
   text-align: center;
+}
+
+.note-input {
+  display: block;
+  width: 100%;
+  min-height: 96px;
+  margin: 12px 0 0;
+  padding: 13px 14px;
+  border: 0;
+  border-radius: 16px;
+  background: var(--chip);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1.4;
+  outline: none;
+  overflow-y: hidden;
+  resize: none;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.note-input::placeholder {
+  color: var(--mute);
+  opacity: 1;
+}
+
+.note-input:focus-visible {
+  outline: 2px solid var(--acc);
+  outline-offset: 2px;
 }
 
 /* Progress -------------------------------------------------------------- */
