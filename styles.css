@@ -68,6 +68,10 @@
   box-sizing: border-box;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 html {
   min-height: 100%;
   background-color: var(--bg-a);
@@ -691,7 +695,7 @@ input[type="number"]::-webkit-inner-spin-button {
 }
 
 .idle-title {
-  max-width: 290px;
+  max-width: 320px;
   margin: 0;
   color: var(--ink);
   font-family: var(--font-display);
@@ -700,6 +704,7 @@ input[type="number"]::-webkit-inner-spin-button {
   letter-spacing: -0.005em;
   line-height: 1;
   text-align: center;
+  text-wrap: balance;
 }
 
 .idle-disc {
@@ -1332,11 +1337,11 @@ input[type="number"]::-webkit-inner-spin-button {
   place-items: center;
   height: 23px;
   color: var(--mute);
-  font-size: 10px;
+  font-family: var(--font-ui);
+  font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.055em;
+  letter-spacing: 0.02em;
   line-height: 1;
-  text-transform: uppercase;
 }
 
 .days-grid {
@@ -1665,7 +1670,7 @@ input[type="number"]::-webkit-inner-spin-button {
 }
 
 .progress-latest-unit {
-  margin-left: 2px;
+  margin-left: 3px;
   color: var(--mute);
   font-family: var(--font-ui);
   font-size: 11px;

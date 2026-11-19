@@ -353,7 +353,7 @@
 
   function makeExerciseArt(name) {
     const key = getIllustrationKey(name);
-    const wrapper = el("div", {
+    const wrapper = el("span", {
       class: "exercise-art",
       "aria-hidden": "true",
       dataset: { illustration: key }
@@ -411,22 +411,23 @@
       <path d="M54 75l-9 17-7 16M66 75l9 17 7 16"/>
     </g></svg>`,
     bicepscur: `<svg viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false"><g stroke="var(--acc)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
-      <circle cx="51" cy="26" r="10" fill="var(--card)"/>
-      <path d="M43 41c6-5 13-5 18 0l-1 39c-5 4-10 4-15 0z" fill="var(--track)"/>
-      <path d="M58 50l20 19-5 25"/>
-      <path d="M42 78L36 99l-7 13M58 80l7 18 8 14"/>
-      <path d="M62 38h17M62 31v14M79 31v14"/>
-      <path d="M78 68l-4-18 3-11"/>
+      <circle cx="51" cy="25" r="10" fill="var(--card)"/>
+      <path d="M43 40c6-5 13-5 18 0l-1 39c-5 4-10 4-15 0z" fill="var(--track)"/>
+      <path d="M60 50l21 18-4-32"/>
+      <path d="M43 78L36 98l-7 12M57 79l7 18 8 13"/>
+      <path d="M68 34h22M68 27v14M90 27v14"/>
+      <path d="M43 48L31 70l7 12"/>
     </g></svg>`,
     triceps: `<svg viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false"><g stroke="var(--acc)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M102 14v94M94 108h16M102 30h-8"/>
-      <circle cx="92" cy="27" r="8"/>
-      <path d="M88 34l-3 13"/>
-      <circle cx="46" cy="28" r="10" fill="var(--card)"/>
-      <path d="M38 44c7-6 14-6 20 0l-2 37c-6 5-11 5-16 0z" fill="var(--track)"/>
-      <path d="M55 52l16-13 12 2"/>
-      <path d="M83 41l-7 11M85 44l-2 10"/>
-      <path d="M41 79l-6 19-7 12M56 80l6 18 8 13"/>
+      <path d="M106 12v94M98 108h16M106 34h-7"/>
+      <circle cx="96" cy="24" r="8"/>
+      <path d="M94 32l-12 26"/>
+      <circle cx="43" cy="27" r="10" fill="var(--card)"/>
+      <path d="M35 42c7-6 14-6 20 0l-2 37c-6 5-11 5-16 0z" fill="var(--track)"/>
+      <path d="M55 51l20-13 7 20"/>
+      <path d="M82 58l-6 7M84 61l2 9"/>
+      <path d="M38 78l-6 19-7 12M53 79l6 18 8 13"/>
+      <path d="M37 47L25 68l8 10"/>
     </g></svg>`,
     squat: `<svg viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false"><g stroke="var(--acc)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
       <path d="M18 46h84M24 38v16M96 38v16"/>
@@ -446,20 +447,21 @@
       <circle cx="86" cy="55" r="5"/>
     </g></svg>`,
     calfraise: `<svg viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false"><g stroke="var(--acc)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
-      <circle cx="60" cy="22" r="10" fill="var(--card)"/>
-      <path d="M51 37c6-5 12-5 18 0l-2 32c-5 4-9 4-14 0z" fill="var(--track)"/>
-      <path d="M52 45L31 57M68 45l21 12"/>
-      <path d="M54 68l-4 19-1 11-8 8M66 68l4 19 1 11 8 8"/>
-      <path d="M20 108h80"/>
-      <path d="M41 106v-5M79 106v-5"/>
+      <path d="M20 110h80"/>
+      <path d="M30 102h60M34 102v8M86 102v8"/>
+      <circle cx="60" cy="18" r="10" fill="var(--card)"/>
+      <path d="M51 33c6-5 12-5 18 0l-2 34c-5 4-9 4-14 0z" fill="var(--track)"/>
+      <path d="M52 41L36 54l-3 13M68 41l16 13 3 13"/>
+      <path d="M55 71l-2 10M65 71l2 10"/>
+      <path d="M53 81L39 98l-4 4M67 81l14 17 4 4"/>
     </g></svg>`,
     abs: `<svg viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false"><g stroke="var(--acc)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M12 99h96"/>
-      <circle cx="33" cy="52" r="10" fill="var(--card)"/>
-      <path d="M40 60c8 3 16 10 22 20l-5 10c-9-10-17-15-25-16z" fill="var(--track)"/>
-      <path d="M48 66l13-8 12 7M54 56l15-8"/>
-      <path d="M62 89l15-24 16 17"/>
-      <path d="M94 84l8 12M43 78l-4 10"/>
+      <path d="M12 103h96"/>
+      <circle cx="31" cy="56" r="10" fill="var(--card)"/>
+      <path d="M39 63c5-7 12-8 18-3l19 19c5 5 3 13-4 15l-9 1-16-11-11-12z" fill="var(--track)"/>
+      <path d="M45 67l16 8 15 8"/>
+      <path d="M72 91l18-27 14 22"/>
+      <path d="M93 96l8 5"/>
     </g></svg>`,
     backextension: `<svg viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false"><g stroke="var(--acc)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
       <path d="M12 106h96"/>
@@ -950,7 +952,7 @@
     }
 
     try {
-      window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+      window.scrollTo({ top: 0, left: 0, behavior: "auto" });
     } catch (error) {
       window.scrollTo(0, 0);
     }
@@ -1896,6 +1898,11 @@
       }
     });
     repsInput.addEventListener("blur", () => {
+      if (String(repsInput.value).trim() === "") {
+        repsInput.value = String(activeWorkout.reps);
+        paintReps();
+        return;
+      }
       const value = clampInt(repsInput.value, 1, 999);
       applyReps(value);
     });

@@ -55,32 +55,37 @@ function isFontRequest(url) {
   );
 }
 
-async function staleWhileRevalidate(request) {
-  const cache = await caches.open(FONT_CACHE);
-  const cached = await cache.match(request);
+function serveFont(event) {
+  const request = event.request;
+  const cachePromise = caches.open(FONT_CACHE);
+  const cachedPromise = cachePromise.then((cache) => cache.match(request));
 
-  const network = fetch(request)
-    .then((response) => {
+  const networkPromise = fetch(request)
+    .then(async (response) => {
       if (response && (response.ok || response.type === "opaque")) {
-        cache.put(request, response.clone());
+        const cache = await cachePromise;
+        await cache.put(request, response.clone());
       }
       return response;
     })
     .catch(() => null);
 
-  if (cached) {
-    // Refresh in the background without delaying the cached font response.
-    network.catch(() => {});
-    return cached;
-  }
+  // The network refresh may outlive respondWith when we have a cached copy.
+  event.waitUntil(networkPromise.then(() => {}).catch(() => {}));
 
-  const response = await network;
-  return (
-    response ||
-    new Response("Font unavailable offline", {
-      status: 504,
-      headers: { "Content-Type": "text/plain; charset=utf-8" }
-    })
+  event.respondWith(
+    (async () => {
+      const cached = await cachedPromise;
+      if (cached) return cached;
+      const response = await networkPromise;
+      return (
+        response ||
+        new Response("Font unavailable offline", {
+          status: 504,
+          headers: { "Content-Type": "text/plain; charset=utf-8" }
+        })
+      );
+    })()
   );
 }
 
@@ -116,7 +121,7 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(request.url);
 
   if (isFontRequest(url)) {
-    event.respondWith(staleWhileRevalidate(request));
+    serveFont(event);
     return;
   }
 

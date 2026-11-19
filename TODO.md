@@ -32,22 +32,22 @@
 - [x] Progress sparklines, deltas and empty state
 
 ## M6 — PWA and docs
-- [ ] Manifest, icons and metadata
-- [ ] Service worker caching and registration
-- [ ] README install/update/limitations
-- [ ] ASSUMPTIONS review
+- [x] Manifest, icons and metadata
+- [x] Service worker caching and registration
+- [x] README install/update/limitations
+- [x] ASSUMPTIONS review
 
 ## M7 — Verification
-- [ ] Playwright automated behaviour suite
-- [ ] Manifest, icon, service worker, console checks
-- [ ] 360x740 overflow and top-bar layout checks
+- [x] Playwright automated behaviour suite
+- [x] Manifest, icon, service worker, console checks
+- [x] 360x740 overflow and top-bar layout checks
 
 ## M8 — Visual QA
-- [ ] Light screenshots of all six screens
-- [ ] Dark screenshots of all six screens
-- [ ] Review and fix visual defects
+- [x] Light screenshots of all six screens
+- [x] Dark screenshots of all six screens
+- [x] Review and fix visual defects
 
 ## M9 — Release
-- [ ] Final regression run
+- [x] Final regression run
 - [ ] All work committed to `main`
 - [ ] Push attempted and result recorded

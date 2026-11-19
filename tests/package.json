@@ -1,0 +1,13 @@
+{
+  "name": "workout-tracker-verification",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Local Playwright verification for the Workout Tracker static app",
+  "scripts": {
+    "verify": "node verify.cjs",
+    "screenshots": "node capture-screenshots.cjs"
+  },
+  "devDependencies": {
+    "playwright": "1.65.1"
+  }
+}
