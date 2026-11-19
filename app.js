@@ -203,7 +203,9 @@
 
   function formatRepsList(reps) {
     if (!Array.isArray(reps) || reps.length === 0) return "";
-    return `${reps.join(", ")} reps`;
+    const loggedReps = reps.map(Number).filter((value) => value > 0);
+    if (loggedReps.length === 0) return "";
+    return `${loggedReps.join(", ")} reps`;
   }
 
   function pluralize(value, singular, plural = `${singular}s`) {
@@ -709,7 +711,7 @@
                 ? exercise.sets
                     .filter((set) => set && typeof set === "object")
                     .map((set) => ({
-                      r: normalizeReps(set.r),
+                      r: set.r === 0 ? 0 : normalizeReps(set.r),
                       w: normalizeWeight(set.w),
                       t:
                         typeof set.t === "string" && /^\d{2}:\d{2}$/.test(set.t)
@@ -831,6 +833,142 @@
       readJson(STORAGE_KEYS.active, null),
       settings.break
     );
+  }
+
+  /* -----------------------------------------------------------------------
+     One-time historical import
+     The source history is defined below and merged into the device's existing
+     sessions on first launch. The importV1 flag records that the merge has
+     completed; a date that already has a session is always left untouched.
+     ----------------------------------------------------------------------- */
+
+  const IMPORT_FLAG_V1 = "importV1";
+
+  function historySets(...sets) {
+    return sets.map(([weight, reps]) => ({ r: reps, w: weight, t: "00:00" }));
+  }
+
+  const HISTORY_SESSIONS_V1 = [
+    {
+      id: "import-v1-2026-11-05",
+      date: "2026-11-05",
+      title: "Lower",
+      exercises: [
+        { n: "Squat", sets: historySets([15, 2]) },
+        { n: "Leg curl", sets: historySets([39, 0]) },
+        { n: "Calve", sets: historySets([0, 0]) },
+        { n: "Abs", sets: historySets([0, 0]) },
+        { n: "Elevation (lombaire)", sets: historySets([0, 0]) }
+      ]
+    },
+    {
+      id: "import-v1-2026-11-07",
+      date: "2026-11-07",
+      title: "Upper",
+      exercises: [
+        { n: "Bench", sets: historySets([67.5, 0]) },
+        { n: "Lat Pull Down", sets: historySets([59, 0]) },
+        { n: "Lateral raise", sets: historySets([10, 0]) },
+        { n: "Biceps curl", sets: historySets([14, 0]) },
+        { n: "Triceps cable", sets: historySets([27, 0]) }
+      ]
+    },
+    {
+      id: "import-v1-2026-11-10",
+      date: "2026-11-10",
+      title: "Lower",
+      exercises: [
+        { n: "Squat", sets: historySets([60, 0]) },
+        { n: "Romanian deadlift", sets: historySets([60, 0]) },
+        { n: "Calve", sets: historySets([20, 0]) },
+        { n: "Abs", sets: historySets([32, 0]) },
+        { n: "Elevation (lombaire)", sets: historySets([10, 0]) }
+      ]
+    },
+    {
+      id: "import-v1-2026-11-12",
+      date: "2026-11-12",
+      title: "Upper",
+      exercises: [
+        { n: "Bench", sets: historySets([70, 8], [70, 8], [70, 6]) },
+        { n: "Lat Pull Down", sets: historySets([52, 8], [59, 8], [59, 8]) },
+        { n: "Lateral raise", sets: historySets([10, 10], [10, 8]) },
+        { n: "Biceps curl", sets: historySets([12, 8], [12, 5]) },
+        { n: "Triceps cable", sets: historySets([22.5, 10], [22.5, 10]) },
+        { n: "Dorian biceps", sets: historySets([10, 0]) }
+      ]
+    },
+    {
+      id: "import-v1-2026-11-14",
+      date: "2026-11-14",
+      title: "Lower",
+      exercises: [
+        { n: "Squat", sets: historySets([65, 6], [65, 6], [65, 6]) },
+        { n: "Leg curl", sets: historySets([32, 6], [32, 6]) },
+        { n: "Calve", sets: historySets([20, 8], [20, 8], [20, 8]) },
+        { n: "Abs", sets: historySets([36, 8], [36, 8]) },
+        { n: "Elevation (lombaire)", sets: historySets([10, 8], [10, 8]) }
+      ]
+    },
+    {
+      id: "import-v1-2026-11-17",
+      date: "2026-11-17",
+      title: "Upper",
+      exercises: [
+        { n: "Bench", sets: historySets([72.5, 8], [72.5, 6], [72.5, 6]) },
+        { n: "Lat Pull Down", sets: historySets([66, 8], [66, 8], [66, 6]) },
+        { n: "Lateral raise", sets: historySets([10, 8], [10, 8]) },
+        { n: "Biceps curl", sets: historySets([14, 6], [12, 8]) },
+        { n: "Triceps cable", sets: historySets([29.3, 8], [29.3, 4], [27, 3]) }
+      ]
+    },
+    {
+      id: "import-v1-2026-11-19",
+      date: "2026-11-19",
+      title: "Lower",
+      exercises: [
+        { n: "Squat", sets: historySets([75, 7], [75, 6], [75, 7]) },
+        { n: "Leg curl", sets: historySets([18, 7], [18, 8], [18, 6], [25, 1]) },
+        { n: "Calve", sets: historySets([25, 8], [30, 8]) },
+        { n: "Abs", sets: historySets([50, 8], [54, 8]) },
+        { n: "Elevation (lombaire)", sets: historySets([15, 8], [20, 8]) }
+      ]
+    }
+  ];
+
+  function importHistoryV1() {
+    try {
+      if (readStorage(IMPORT_FLAG_V1) !== null) return;
+
+      const rawSessions = readStorage(STORAGE_KEYS.sessions);
+      let existingSessions = [];
+      if (rawSessions !== null) {
+        const parsedSessions = parseJson(rawSessions, null);
+        if (!Array.isArray(parsedSessions)) return;
+        existingSessions = parsedSessions;
+      }
+
+      const existingDates = new Set(
+        existingSessions
+          .filter((session) => session && typeof session.date === "string")
+          .map((session) => session.date)
+      );
+      const missingSessions = HISTORY_SESSIONS_V1.filter(
+        (session) => !existingDates.has(session.date)
+      );
+
+      if (missingSessions.length > 0) {
+        const mergedSessions = existingSessions.concat(missingSessions);
+        mergedSessions.sort((a, b) =>
+          String((a && a.date) || "").localeCompare(String((b && b.date) || ""))
+        );
+        if (!writeJson(STORAGE_KEYS.sessions, mergedSessions)) return;
+      }
+
+      writeStorage(IMPORT_FLAG_V1, "1");
+    } catch (error) {
+      // Leave the flag unset so the import can retry on a later launch.
+    }
   }
 
   /* -----------------------------------------------------------------------
@@ -3155,6 +3293,7 @@
   }
 
   function boot() {
+    importHistoryV1();
     loadData();
     setInitialRoute();
     bindGlobalEvents();

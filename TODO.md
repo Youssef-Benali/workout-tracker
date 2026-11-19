@@ -7,7 +7,7 @@
 
 ## M2 — App core
 - [x] Storage layer with `wt.v1.` keys and guarded access
-- [x] Seeded Upper and Lower programs, no history
+- [x] Seeded Upper and Lower programs
 - [x] Hash router with browser Back support
 - [x] Shared header, icon buttons, illustrations
 
@@ -51,6 +51,11 @@
 - [x] Final regression run
 - [x] All work committed to `main`
 - [x] Push attempted and result recorded
+
+## M10 — Historical import
+- [x] One-time `importV1` merge of the seven November 2026 sessions
+- [x] Skip dates that already have a session; preserve all existing data
+- [x] Cache bumped to `wt-v3`
 
 Push result: local commits only. `git push -u origin main` failed because no remote was supplied with the brief:
 

@@ -9,8 +9,8 @@ step, no framework and no runtime dependencies.
 
 ## What it does
 
-- **Two starting programs on first run** — Upper and Lower — and no sample
-  history or demo sessions.
+- **Two starting programs on first run** — Upper and Lower — plus a one-time
+  import of seven November 2026 sessions. No demo sessions are generated.
 - **One-tap workout start** from the workout screen or directly from the
   program editor.
 - **A rest timer that counts up from 0:00 to 60, 120 or 180 seconds**, driven by
@@ -52,14 +52,14 @@ The service worker precaches the app shell. When shipping a change, the cache
 name must change so installed copies receive the new files:
 
 1. Make and test your changes to the static files.
-2. In `sw.js`, change **only this line** to a new unique value:
-   `const CACHE_VERSION = "wt-v1";` → `const CACHE_VERSION = "wt-v2";`
+2. In `sw.js`, change **only this line** to a new unique value, for example
+   `const CACHE_VERSION = "wt-v3";` → `const CACHE_VERSION = "wt-v4";`
 3. Commit and push to `main`, and let GitHub Pages finish deploying.
 4. Open the installed app twice with internet available: the first launch
    checks for and installs the new worker, the second launch serves the newly
    cached shell.
 5. Optionally verify the new version in Chrome DevTools → Application →
-   Service Workers / Cache Storage (`workout-tracker-shell-wt-v2`).
+   Service Workers / Cache Storage (`workout-tracker-shell-wt-v4`).
 
 Bumping the version is enough: the worker deletes superseded
 `workout-tracker-*` caches during activation and claims open clients. Because of
@@ -91,11 +91,12 @@ node tests/verify.cjs
 node tests/capture-screenshots.cjs
 ```
 
-`tests/verify.cjs` covers first-run seeding, editor changes, pointer and
-keyboard reordering, workout logging, timer states, calendar and progress
-behaviour, reload persistence, the 360 × 740 layout, icons, the manifest and
-service worker registration. `tests/capture-screenshots.cjs` writes the six
-screens in both colour schemes to `tests/screenshots/`.
+`tests/verify.cjs` covers first-run seeding and the one-time history import,
+editor changes, pointer and keyboard reordering, workout logging, timer states,
+calendar and progress behaviour, reload persistence, the 360 × 740 layout,
+icons, the manifest and service worker registration.
+`tests/capture-screenshots.cjs` writes the six screens in both colour schemes to
+`tests/screenshots/`.
 
 ## Files
 
@@ -115,7 +116,8 @@ screens in both colour schemes to `tests/screenshots/`.
 All app URLs are relative (`./`) so the same files work at a GitHub Pages
 sub-path. Data is stored in `localStorage` under the `wt.v1.` prefix —
 `wt.v1.programs`, `wt.v1.sessions`, `wt.v1.active` and `wt.v1.settings` — plus
-the per-day `notes` key, which holds `{ "YYYY-MM-DD": "text" }`.
+the per-day `notes` key, which holds `{ "YYYY-MM-DD": "text" }`. A one-time
+`importV1` flag records that the historical merge has completed.
 
 ## Known limitations
 

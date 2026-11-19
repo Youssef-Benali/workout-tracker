@@ -34,7 +34,8 @@ async function main() {
       viewport = { width: 390, height: 844 },
       colorScheme = "light",
       serviceWorkers = "allow",
-      startPath = "/"
+      startPath = "/",
+      importHistory = false
     } = options;
     const context = await browser.newContext({
       viewport,
@@ -43,6 +44,17 @@ async function main() {
       timezoneId: "Europe/Brussels",
       serviceWorkers
     });
+    if (!importHistory) {
+      // Most scenarios exercise a device that has already completed the
+      // one-time historical import; the import scenarios opt back in.
+      await context.addInitScript(() => {
+        try {
+          window.localStorage.setItem("importV1", "1");
+        } catch (error) {
+          // A scenario will fail if storage is unexpectedly unavailable.
+        }
+      });
+    }
     const page = await context.newPage();
     const errors = [];
     page.on("console", (message) => {
@@ -164,11 +176,31 @@ async function main() {
      1. First run
      --------------------------------------------------------------------- */
 
-  await scenario("First run seeds exactly Upper and Lower with no history", async ({ page }) => {
-    assert.deepEqual(await storageKeys(page), ["wt.v1.programs"]);
-    assert.equal(await readStore(page, "wt.v1.sessions"), null);
+  await scenario("First run seeds programs and imports the seven historical sessions", async ({ page }) => {
+    assert.deepEqual(await storageKeys(page), [
+      "importV1",
+      "wt.v1.programs",
+      "wt.v1.sessions"
+    ]);
+    assert.equal(await page.evaluate(() => localStorage.getItem("importV1")), "1");
     assert.equal(await readStore(page, "wt.v1.active"), null);
     assert.equal(await readStore(page, "wt.v1.settings"), null);
+
+    const imported = await readStore(page, "wt.v1.sessions");
+    assert.equal(Array.isArray(imported), true);
+    assert.equal(imported.length, 7);
+    assert.deepEqual(
+      imported.map((session) => session.date),
+      [
+        "2026-11-05",
+        "2026-11-07",
+        "2026-11-10",
+        "2026-11-12",
+        "2026-11-14",
+        "2026-11-17",
+        "2026-11-19"
+      ]
+    );
 
     const programCards = page.locator(".program-card");
     assert.equal(await programCards.count(), 2);
@@ -222,9 +254,23 @@ async function main() {
 
     await page.getByLabel("Open progress", { exact: true }).click();
     await page.waitForSelector(".screen-progress");
-    assert.equal(
-      sanitize(await page.locator(".progress-hint").textContent()),
-      "Log at least two sessions to see progress."
+    assert.equal(await page.locator(".progress-row").count(), 10);
+    assert.deepEqual(
+      await page
+        .locator(".progress-name")
+        .evaluateAll((elements) => elements.map((element) => element.textContent.trim())),
+      [
+        "Squat",
+        "Leg curl",
+        "Calve",
+        "Abs",
+        "Elevation (lombaire)",
+        "Bench",
+        "Lat Pull Down",
+        "Lateral raise",
+        "Biceps curl",
+        "Triceps cable"
+      ]
     );
 
     await page.goBack();
@@ -232,13 +278,272 @@ async function main() {
 
     await page.getByLabel("Open training calendar", { exact: true }).click();
     await page.waitForSelector(".screen-calendar");
-    assert.equal(sanitize(await page.locator(".month-sub").textContent()), "No training");
-    assert.match(
-      sanitize(await page.locator(".empty-day").textContent()),
-      /^Nothing logged on \d{1,2} [A-Z][a-z]+\.$/
+    assert.equal(sanitize(await page.locator(".month-sub").textContent()), "7 trained days");
+    assert.equal(await page.locator(".day.is-trained").count(), 7);
+    assert.deepEqual(
+      await page
+        .locator(".day.is-trained .day-number")
+        .evaluateAll((elements) => elements.map((element) => element.textContent.trim())),
+      ["5", "7", "10", "12", "14", "17", "19"]
     );
-    assert.equal(await page.locator(".session-card").count(), 0);
-  });
+    assert.equal(
+      sanitize(await page.locator(".day.is-selected .day-number").textContent()),
+      "19"
+    );
+    assert.equal(await page.locator(".session-card").count(), 1);
+    assert.equal(sanitize(await page.locator(".session-title").first().textContent()), "Lower");
+    await page.locator(".session-head").click();
+    const bodyText = sanitize(await page.locator(".session-body").first().textContent());
+    assert.match(bodyText, /Squat/);
+    assert.match(bodyText, /75 kg/);
+    assert.match(bodyText, /7, 6, 7 reps/);
+    assert.match(bodyText, /Leg curl/);
+    assert.match(bodyText, /25 kg/);
+  }, { importHistory: true });
+
+  await scenario("Historical import stores the exact sessions, sets and weights", async ({ page }) => {
+    const sessions = await readStore(page, "wt.v1.sessions");
+    assert.equal(sessions.length, 7);
+    assert.deepEqual(
+      sessions.map((session) => ({
+        date: session.date,
+        title: session.title,
+        exercises: session.exercises.map((exercise) => [
+          exercise.n,
+          exercise.sets.map((set) => [set.w, set.r])
+        ])
+      })),
+      [
+        {
+          date: "2026-11-05",
+          title: "Lower",
+          exercises: [
+            ["Squat", [[15, 2]]],
+            ["Leg curl", [[39, 0]]],
+            ["Calve", [[0, 0]]],
+            ["Abs", [[0, 0]]],
+            ["Elevation (lombaire)", [[0, 0]]]
+          ]
+        },
+        {
+          date: "2026-11-07",
+          title: "Upper",
+          exercises: [
+            ["Bench", [[67.5, 0]]],
+            ["Lat Pull Down", [[59, 0]]],
+            ["Lateral raise", [[10, 0]]],
+            ["Biceps curl", [[14, 0]]],
+            ["Triceps cable", [[27, 0]]]
+          ]
+        },
+        {
+          date: "2026-11-10",
+          title: "Lower",
+          exercises: [
+            ["Squat", [[60, 0]]],
+            ["Romanian deadlift", [[60, 0]]],
+            ["Calve", [[20, 0]]],
+            ["Abs", [[32, 0]]],
+            ["Elevation (lombaire)", [[10, 0]]]
+          ]
+        },
+        {
+          date: "2026-11-12",
+          title: "Upper",
+          exercises: [
+            ["Bench", [[70, 8], [70, 8], [70, 6]]],
+            ["Lat Pull Down", [[52, 8], [59, 8], [59, 8]]],
+            ["Lateral raise", [[10, 10], [10, 8]]],
+            ["Biceps curl", [[12, 8], [12, 5]]],
+            ["Triceps cable", [[22.5, 10], [22.5, 10]]],
+            ["Dorian biceps", [[10, 0]]]
+          ]
+        },
+        {
+          date: "2026-11-14",
+          title: "Lower",
+          exercises: [
+            ["Squat", [[65, 6], [65, 6], [65, 6]]],
+            ["Leg curl", [[32, 6], [32, 6]]],
+            ["Calve", [[20, 8], [20, 8], [20, 8]]],
+            ["Abs", [[36, 8], [36, 8]]],
+            ["Elevation (lombaire)", [[10, 8], [10, 8]]]
+          ]
+        },
+        {
+          date: "2026-11-17",
+          title: "Upper",
+          exercises: [
+            ["Bench", [[72.5, 8], [72.5, 6], [72.5, 6]]],
+            ["Lat Pull Down", [[66, 8], [66, 8], [66, 6]]],
+            ["Lateral raise", [[10, 8], [10, 8]]],
+            ["Biceps curl", [[14, 6], [12, 8]]],
+            ["Triceps cable", [[29.3, 8], [29.3, 4], [27, 3]]]
+          ]
+        },
+        {
+          date: "2026-11-19",
+          title: "Lower",
+          exercises: [
+            ["Squat", [[75, 7], [75, 6], [75, 7]]],
+            ["Leg curl", [[18, 7], [18, 8], [18, 6], [25, 1]]],
+            ["Calve", [[25, 8], [30, 8]]],
+            ["Abs", [[50, 8], [54, 8]]],
+            ["Elevation (lombaire)", [[15, 8], [20, 8]]]
+          ]
+        }
+      ]
+    );
+
+    assert.equal(
+      sessions.every(
+        (session) =>
+          typeof session.id === "string" &&
+          session.id.startsWith("import-v1-") &&
+          session.exercises.every((exercise) =>
+            exercise.sets.every(
+              (set) =>
+                typeof set.w === "number" &&
+                typeof set.r === "number" &&
+                set.t === "00:00"
+            )
+          )
+      ),
+      true
+    );
+
+    const programs = await readStore(page, "wt.v1.programs");
+    const programNames = programs.flatMap((program) =>
+      program.items.map((item) => item.n)
+    );
+    assert.deepEqual(programNames, [
+      "Bench",
+      "Lat Pull Down",
+      "Lateral raise",
+      "Biceps curl",
+      "Triceps cable",
+      "Squat",
+      "Leg curl",
+      "Calve",
+      "Abs",
+      "Elevation (lombaire)"
+    ]);
+  }, { importHistory: true });
+
+  await scenario("Historical import renders unknown reps without inventing values", async ({ page }) => {
+    await page.getByLabel("Open training calendar", { exact: true }).click();
+    await page.waitForSelector(".screen-calendar");
+
+    const selectDay = async (day) => {
+      await page
+        .locator(".day:not(.is-blank)", {
+          has: page.locator(".day-number", { hasText: new RegExp(`^${day}$`) })
+        })
+        .click();
+      await page.waitForTimeout(20);
+      await page.locator(".session-head").first().click();
+      await page.waitForTimeout(20);
+    };
+
+    await selectDay("10");
+    let body = sanitize(await page.locator(".session-body").first().textContent());
+    assert.match(body, /Squat/);
+    assert.match(body, /60 kg/);
+    assert.match(body, /Romanian deadlift/);
+    assert.doesNotMatch(body, /\b1 reps\b/);
+    assert.deepEqual(
+      await page
+        .locator(".session-ex-reps")
+        .evaluateAll((elements) => elements.map((element) => element.textContent)),
+      ["", "", "", "", ""]
+    );
+
+    await selectDay("5");
+    body = sanitize(await page.locator(".session-body").first().textContent());
+    assert.match(body, /15 kg/);
+    assert.match(body, /2 reps/);
+    assert.match(body, /39 kg/);
+    assert.match(body, /Body weight/);
+    assert.doesNotMatch(body, /\b1 reps\b/);
+  }, { importHistory: true });
+
+  await scenario("Historical import never duplicates sessions and keeps its flag", async ({ page }) => {
+    const before = await readStore(page, "wt.v1.sessions");
+    assert.equal(before.length, 7);
+
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.waitForSelector(".screen-list");
+    const after = await readStore(page, "wt.v1.sessions");
+    assert.deepEqual(after, before);
+    assert.equal(after.length, 7);
+    assert.equal(new Set(after.map((session) => session.date)).size, 7);
+    assert.equal(await page.evaluate(() => localStorage.getItem("importV1")), "1");
+
+    await page.evaluate(() => localStorage.removeItem("wt.v1.sessions"));
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.waitForSelector(".screen-list");
+    assert.equal(await readStore(page, "wt.v1.sessions"), null);
+  }, { importHistory: true });
+
+  await scenario("Historical import skips a date that already has a session", async ({ page }) => {
+    const existing = {
+      id: "phone-17-nov",
+      date: "2026-11-17",
+      title: "Upper",
+      exercises: [
+        { n: "Bench", sets: [{ r: 5, w: 60, t: "07:30" }] }
+      ]
+    };
+    await page.evaluate((session) => {
+      localStorage.setItem("wt.v1.sessions", JSON.stringify([session]));
+      localStorage.setItem("wt.v1.settings", JSON.stringify({ break: 60 }));
+      localStorage.setItem("notes", JSON.stringify({ "2026-11-17": "keep this note" }));
+      localStorage.setItem("keepMe", "yes");
+      localStorage.removeItem("importV1");
+    }, existing);
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.waitForSelector(".screen-list");
+
+    const sessions = await readStore(page, "wt.v1.sessions");
+    assert.equal(sessions.length, 7);
+    assert.deepEqual(
+      sessions.map((session) => session.date),
+      [
+        "2026-11-05",
+        "2026-11-07",
+        "2026-11-10",
+        "2026-11-12",
+        "2026-11-14",
+        "2026-11-17",
+        "2026-11-19"
+      ]
+    );
+    assert.deepEqual(
+      sessions.find((session) => session.date === "2026-11-17"),
+      existing
+    );
+    assert.equal(await page.evaluate(() => localStorage.getItem("importV1")), "1");
+    assert.deepEqual(await readStore(page, "wt.v1.settings"), { break: 60 });
+    assert.deepEqual(await readStore(page, "notes"), {
+      "2026-11-17": "keep this note"
+    });
+    assert.equal(await page.evaluate(() => localStorage.getItem("keepMe")), "yes");
+
+    await page.getByLabel("Open training calendar", { exact: true }).click();
+    await page.waitForSelector(".screen-calendar");
+    assert.equal(sanitize(await page.locator(".month-sub").textContent()), "7 trained days");
+    const day17 = page.locator(".day:not(.is-blank)", { hasText: "17" });
+    assert.equal(await day17.count(), 1);
+    await day17.click();
+    await page.waitForTimeout(20);
+    assert.equal(await page.locator(".session-card").count(), 1);
+    assert.equal(sanitize(await page.locator(".session-title").textContent()), "Upper");
+    await page.locator(".session-head").click();
+    const body = sanitize(await page.locator(".session-body").textContent());
+    assert.match(body, /Bench/);
+    assert.match(body, /60 kg/);
+    assert.match(body, /5 reps/);
+  }, { importHistory: true });
 
   /* ---------------------------------------------------------------------
      2. Program editor: save state, add, rename, delete, discard
@@ -1499,13 +1804,14 @@ async function main() {
     assert.ok(swInfo.scriptUrl.endsWith("/sw.js"));
     assert.ok(swInfo.scope.endsWith("/"));
     assert.ok(swInfo.cacheNames.some((name) => name.startsWith("workout-tracker-shell-")));
+    assert.ok(swInfo.cacheNames.includes("workout-tracker-shell-wt-v3"));
 
     const appSource = fs.readFileSync(path.join(ROOT, "app.js"), "utf8");
     assert.equal(/toISOString\s*\(/.test(appSource), false);
     assert.equal(/\b(?:alert|confirm|prompt)\s*\(/.test(appSource), false);
     assert.ok(appSource.includes('"wt.v1.programs"'));
     const swSource = fs.readFileSync(path.join(ROOT, "sw.js"), "utf8");
-    assert.match(swSource, /const CACHE_VERSION = "wt-v2";/);
+    assert.match(swSource, /const CACHE_VERSION = "wt-v3";/);
     assert.match(swSource, /skipWaiting/);
     assert.match(swSource, /clients\.claim/);
     assert.match(swSource, /caches\.delete/);

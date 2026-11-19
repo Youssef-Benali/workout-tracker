@@ -19,7 +19,9 @@ The product brief is the source of truth. Where it leaves a detail open, this fi
 - Weight edits during a workout are applied to the active snapshot and, when the workout came from a saved program, written back to that program item.
 - A completed session includes every exercise in the workout snapshot. Exercises without logged sets remain in the session but do not contribute to progress.
 - The timer state is stored with the active workout as accumulated milliseconds plus the wall-clock time it last started. A reload therefore keeps a paused value or resumes a running count from its actual timestamp. If the break elapsed while the app was closed, the timer opens already complete without replaying the completion vibration.
-- A finished session is dated on the local day it is finished. `sessions` and `settings` keys are not created on first run. Only `wt.v1.programs` is seeded.
+- A finished session is dated on the local day it is finished. On first run, `wt.v1.programs` is seeded and the one-time history import creates `wt.v1.sessions`; `wt.v1.settings` is only created after a change.
+- The historical import is defined in `app.js` because the source data lived in the phone's `localStorage`. It writes only `wt.v1.sessions` and the `importV1` flag. It merges by date: a date with any existing session is skipped, existing entries are preserved, and the merged array is sorted by date. The flag is set only after a successful write.
+- Imported exercise names reuse the saved program names: Calves is stored as `Calve` and Lower back as `Elevation (lombaire)`. Romanian deadlift and Dorian biceps stay session-only extras. Unknown reps are stored as `0` and rendered without a reps line; imported sets use the schema's `t: "00:00"` placeholder because no times were supplied.
 
 ## Navigation
 
