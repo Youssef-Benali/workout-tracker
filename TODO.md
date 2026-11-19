@@ -57,6 +57,11 @@
 - [x] Skip dates that already have a session; preserve all existing data
 - [x] Cache bumped to `wt-v3`
 
+## M11 — Barbell weight fix
+- [x] Correct Bench and Squat weights in the fresh-import data
+- [x] One-time `barFixV1` migration for already imported sessions
+- [x] Cache bumped to `wt-v4`
+
 Push result: local commits only. `git push -u origin main` failed because no remote was supplied with the brief:
 
 ```text

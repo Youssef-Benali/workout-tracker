@@ -5,7 +5,7 @@
  * then commit and deploy. The new worker precaches the new app shell and
  * deletes caches from the previous version when it activates.
  */
-const CACHE_VERSION = "wt-v3"; // bump on every release.
+const CACHE_VERSION = "wt-v4"; // bump on every release.
 
 const SHELL_CACHE = `workout-tracker-shell-${CACHE_VERSION}`;
 const FONT_CACHE = `workout-tracker-fonts-${CACHE_VERSION}`;

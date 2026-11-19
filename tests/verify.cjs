@@ -178,11 +178,13 @@ async function main() {
 
   await scenario("First run seeds programs and imports the seven historical sessions", async ({ page }) => {
     assert.deepEqual(await storageKeys(page), [
+      "barFixV1",
       "importV1",
       "wt.v1.programs",
       "wt.v1.sessions"
     ]);
     assert.equal(await page.evaluate(() => localStorage.getItem("importV1")), "1");
+    assert.equal(await page.evaluate(() => localStorage.getItem("barFixV1")), "1");
     assert.equal(await readStore(page, "wt.v1.active"), null);
     assert.equal(await readStore(page, "wt.v1.settings"), null);
 
@@ -318,7 +320,7 @@ async function main() {
           date: "2026-11-05",
           title: "Lower",
           exercises: [
-            ["Squat", [[15, 2]]],
+            ["Squat", [[35, 2]]],
             ["Leg curl", [[39, 0]]],
             ["Calve", [[0, 0]]],
             ["Abs", [[0, 0]]],
@@ -340,7 +342,7 @@ async function main() {
           date: "2026-11-10",
           title: "Lower",
           exercises: [
-            ["Squat", [[60, 0]]],
+            ["Squat", [[80, 0]]],
             ["Romanian deadlift", [[60, 0]]],
             ["Calve", [[20, 0]]],
             ["Abs", [[32, 0]]],
@@ -351,7 +353,7 @@ async function main() {
           date: "2026-11-12",
           title: "Upper",
           exercises: [
-            ["Bench", [[70, 8], [70, 8], [70, 6]]],
+            ["Bench", [[90, 8], [90, 8], [90, 6]]],
             ["Lat Pull Down", [[52, 8], [59, 8], [59, 8]]],
             ["Lateral raise", [[10, 10], [10, 8]]],
             ["Biceps curl", [[12, 8], [12, 5]]],
@@ -363,7 +365,7 @@ async function main() {
           date: "2026-11-14",
           title: "Lower",
           exercises: [
-            ["Squat", [[65, 6], [65, 6], [65, 6]]],
+            ["Squat", [[85, 6], [85, 6], [85, 6]]],
             ["Leg curl", [[32, 6], [32, 6]]],
             ["Calve", [[20, 8], [20, 8], [20, 8]]],
             ["Abs", [[36, 8], [36, 8]]],
@@ -428,6 +430,7 @@ async function main() {
       "Abs",
       "Elevation (lombaire)"
     ]);
+    assert.equal(await page.evaluate(() => localStorage.getItem("barFixV1")), "1");
   }, { importHistory: true });
 
   await scenario("Historical import renders unknown reps without inventing values", async ({ page }) => {
@@ -448,7 +451,7 @@ async function main() {
     await selectDay("10");
     let body = sanitize(await page.locator(".session-body").first().textContent());
     assert.match(body, /Squat/);
-    assert.match(body, /60 kg/);
+    assert.match(body, /80 kg/);
     assert.match(body, /Romanian deadlift/);
     assert.doesNotMatch(body, /\b1 reps\b/);
     assert.deepEqual(
@@ -460,7 +463,7 @@ async function main() {
 
     await selectDay("5");
     body = sanitize(await page.locator(".session-body").first().textContent());
-    assert.match(body, /15 kg/);
+    assert.match(body, /35 kg/);
     assert.match(body, /2 reps/);
     assert.match(body, /39 kg/);
     assert.match(body, /Body weight/);
@@ -543,6 +546,99 @@ async function main() {
     assert.match(body, /Bench/);
     assert.match(body, /60 kg/);
     assert.match(body, /5 reps/);
+  }, { importHistory: true });
+
+  await scenario("Bar-weight migration fixes existing imported sessions exactly once", async ({ page }) => {
+    const beforePrograms = await readStore(page, "wt.v1.programs");
+    await page.evaluate(() => {
+      const sessions = JSON.parse(localStorage.getItem("wt.v1.sessions"));
+      const oldWeights = {
+        "2026-11-05": { Squat: 15 },
+        "2026-11-10": { Squat: 60 },
+        "2026-11-12": { Bench: 70 },
+        "2026-11-14": { Squat: 65 }
+      };
+      sessions.forEach((session) => {
+        const byName = oldWeights[session.date];
+        if (!byName) return;
+        session.exercises.forEach((exercise) => {
+          if (!Object.prototype.hasOwnProperty.call(byName, exercise.n)) return;
+          exercise.sets.forEach((set) => {
+            set.w = byName[exercise.n];
+          });
+        });
+      });
+      const day5 = sessions.find((session) => session.date === "2026-11-05");
+      day5.exercises.push({
+        n: "Bench",
+        sets: [{ r: 0, w: 0, t: "00:00" }]
+      });
+      sessions.push({
+        id: "user-session-20-nov",
+        date: "2026-11-20",
+        title: "Upper",
+        exercises: [{ n: "Bench", sets: [{ r: 5, w: 60, t: "09:00" }] }]
+      });
+      localStorage.setItem("wt.v1.sessions", JSON.stringify(sessions));
+      localStorage.setItem("importV1", "1");
+      localStorage.removeItem("barFixV1");
+    });
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.waitForSelector(".screen-list");
+
+    const sessions = await readStore(page, "wt.v1.sessions");
+    const byDate = new Map(sessions.map((session) => [session.date, session]));
+    const find = (date, name) =>
+      byDate.get(date).exercises.find((exercise) => exercise.n === name);
+    assert.deepEqual(
+      find("2026-11-05", "Squat").sets.map((set) => [set.w, set.r]),
+      [[35, 2]]
+    );
+    assert.deepEqual(
+      find("2026-11-10", "Squat").sets.map((set) => [set.w, set.r]),
+      [[80, 0]]
+    );
+    assert.deepEqual(
+      find("2026-11-12", "Bench").sets.map((set) => [set.w, set.r]),
+      [[90, 8], [90, 8], [90, 6]]
+    );
+    assert.deepEqual(
+      find("2026-11-14", "Squat").sets.map((set) => [set.w, set.r]),
+      [[85, 6], [85, 6], [85, 6]]
+    );
+    assert.deepEqual(
+      find("2026-11-07", "Bench").sets.map((set) => [set.w, set.r]),
+      [[67.5, 0]]
+    );
+    assert.deepEqual(
+      find("2026-11-17", "Bench").sets.map((set) => [set.w, set.r]),
+      [[72.5, 8], [72.5, 6], [72.5, 6]]
+    );
+    assert.deepEqual(
+      find("2026-11-19", "Squat").sets.map((set) => [set.w, set.r]),
+      [[75, 7], [75, 6], [75, 7]]
+    );
+    assert.deepEqual(
+      find("2026-11-10", "Romanian deadlift").sets.map((set) => [set.w, set.r]),
+      [[60, 0]]
+    );
+    assert.deepEqual(
+      find("2026-11-05", "Bench").sets.map((set) => [set.w, set.r]),
+      [[0, 0]]
+    );
+    assert.deepEqual(
+      find("2026-11-20", "Bench").sets.map((set) => [set.w, set.r]),
+      [[60, 5]]
+    );
+    assert.equal(await page.evaluate(() => localStorage.getItem("barFixV1")), "1");
+    assert.equal(await page.evaluate(() => localStorage.getItem("importV1")), "1");
+    assert.deepEqual(await readStore(page, "wt.v1.programs"), beforePrograms);
+
+    const afterFirstRun = await readStore(page, "wt.v1.sessions");
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.waitForSelector(".screen-list");
+    assert.deepEqual(await readStore(page, "wt.v1.sessions"), afterFirstRun);
+    assert.equal(await page.evaluate(() => localStorage.getItem("barFixV1")), "1");
   }, { importHistory: true });
 
   /* ---------------------------------------------------------------------
@@ -1804,14 +1900,14 @@ async function main() {
     assert.ok(swInfo.scriptUrl.endsWith("/sw.js"));
     assert.ok(swInfo.scope.endsWith("/"));
     assert.ok(swInfo.cacheNames.some((name) => name.startsWith("workout-tracker-shell-")));
-    assert.ok(swInfo.cacheNames.includes("workout-tracker-shell-wt-v3"));
+    assert.ok(swInfo.cacheNames.includes("workout-tracker-shell-wt-v4"));
 
     const appSource = fs.readFileSync(path.join(ROOT, "app.js"), "utf8");
     assert.equal(/toISOString\s*\(/.test(appSource), false);
     assert.equal(/\b(?:alert|confirm|prompt)\s*\(/.test(appSource), false);
     assert.ok(appSource.includes('"wt.v1.programs"'));
     const swSource = fs.readFileSync(path.join(ROOT, "sw.js"), "utf8");
-    assert.match(swSource, /const CACHE_VERSION = "wt-v3";/);
+    assert.match(swSource, /const CACHE_VERSION = "wt-v4";/);
     assert.match(swSource, /skipWaiting/);
     assert.match(swSource, /clients\.claim/);
     assert.match(swSource, /caches\.delete/);

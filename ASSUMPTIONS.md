@@ -22,6 +22,7 @@ The product brief is the source of truth. Where it leaves a detail open, this fi
 - A finished session is dated on the local day it is finished. On first run, `wt.v1.programs` is seeded and the one-time history import creates `wt.v1.sessions`; `wt.v1.settings` is only created after a change.
 - The historical import is defined in `app.js` because the source data lived in the phone's `localStorage`. It writes only `wt.v1.sessions` and the `importV1` flag. It merges by date: a date with any existing session is skipped, existing entries are preserved, and the merged array is sorted by date. The flag is set only after a successful write.
 - Imported exercise names reuse the saved program names: Calves is stored as `Calve` and Lower back as `Elevation (lombaire)`. Romanian deadlift and Dorian biceps stay session-only extras. Unknown reps are stored as `0` and rendered without a reps line; imported sets use the schema's `t: "00:00"` placeholder because no times were supplied.
+- Imported Bench and Squat weights include the 20 kg bar. A one-time `barFixV1` migration adds 20 kg to old imported Bench/Squat sets on the seven import dates, except the 7 Nov Bench (67.5 kg), 17 Nov Bench (72.5 kg) and 19 Nov Squat (75 kg), which were already totals; sets with weight 0 are skipped. Fresh installs receive the corrected values from the import and only get the marker. The migration reads and writes only `wt.v1.sessions` and `barFixV1`.
 
 ## Navigation
 

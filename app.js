@@ -854,7 +854,7 @@
       date: "2026-11-05",
       title: "Lower",
       exercises: [
-        { n: "Squat", sets: historySets([15, 2]) },
+        { n: "Squat", sets: historySets([35, 2]) },
         { n: "Leg curl", sets: historySets([39, 0]) },
         { n: "Calve", sets: historySets([0, 0]) },
         { n: "Abs", sets: historySets([0, 0]) },
@@ -878,7 +878,7 @@
       date: "2026-11-10",
       title: "Lower",
       exercises: [
-        { n: "Squat", sets: historySets([60, 0]) },
+        { n: "Squat", sets: historySets([80, 0]) },
         { n: "Romanian deadlift", sets: historySets([60, 0]) },
         { n: "Calve", sets: historySets([20, 0]) },
         { n: "Abs", sets: historySets([32, 0]) },
@@ -890,7 +890,7 @@
       date: "2026-11-12",
       title: "Upper",
       exercises: [
-        { n: "Bench", sets: historySets([70, 8], [70, 8], [70, 6]) },
+        { n: "Bench", sets: historySets([90, 8], [90, 8], [90, 6]) },
         { n: "Lat Pull Down", sets: historySets([52, 8], [59, 8], [59, 8]) },
         { n: "Lateral raise", sets: historySets([10, 10], [10, 8]) },
         { n: "Biceps curl", sets: historySets([12, 8], [12, 5]) },
@@ -903,7 +903,7 @@
       date: "2026-11-14",
       title: "Lower",
       exercises: [
-        { n: "Squat", sets: historySets([65, 6], [65, 6], [65, 6]) },
+        { n: "Squat", sets: historySets([85, 6], [85, 6], [85, 6]) },
         { n: "Leg curl", sets: historySets([32, 6], [32, 6]) },
         { n: "Calve", sets: historySets([20, 8], [20, 8], [20, 8]) },
         { n: "Abs", sets: historySets([36, 8], [36, 8]) },
@@ -968,6 +968,83 @@
       writeStorage(IMPORT_FLAG_V1, "1");
     } catch (error) {
       // Leave the flag unset so the import can retry on a later launch.
+    }
+  }
+
+  /* -----------------------------------------------------------------------
+     One-time bar-weight migration
+     Fresh installs receive the corrected weights from the import above, so
+     they only need the barFixV1 marker. Devices that already ran importV1 get
+     the 20 kg bar added to old Bench and Squat sets once.
+     ----------------------------------------------------------------------- */
+
+  const BAR_FIX_FLAG_V1 = "barFixV1";
+  const BAR_WEIGHT_KG = 20;
+  const BAR_FIX_DATES = new Set([
+    "2026-11-05",
+    "2026-11-07",
+    "2026-11-10",
+    "2026-11-12",
+    "2026-11-14",
+    "2026-11-17",
+    "2026-11-19"
+  ]);
+  // These values were already recorded as totals with the bar included.
+  const BAR_FIX_EXCEPTIONS = new Set([
+    "2026-11-07:Bench",
+    "2026-11-17:Bench",
+    "2026-11-19:Squat"
+  ]);
+
+  function needsBarbellWeight(dateString, exerciseName) {
+    return (
+      BAR_FIX_DATES.has(dateString) &&
+      (exerciseName === "Bench" || exerciseName === "Squat") &&
+      !BAR_FIX_EXCEPTIONS.has(`${dateString}:${exerciseName}`)
+    );
+  }
+
+  function fixImportedBarWeightsV1() {
+    try {
+      if (readStorage(BAR_FIX_FLAG_V1) !== null) return;
+
+      if (readStorage(IMPORT_FLAG_V1) === null) {
+        writeStorage(BAR_FIX_FLAG_V1, "1");
+        return;
+      }
+
+      const rawSessions = readStorage(STORAGE_KEYS.sessions);
+      if (rawSessions === null) {
+        writeStorage(BAR_FIX_FLAG_V1, "1");
+        return;
+      }
+
+      const parsedSessions = parseJson(rawSessions, null);
+      if (!Array.isArray(parsedSessions)) return;
+
+      let changed = false;
+      parsedSessions.forEach((session) => {
+        if (!session || typeof session !== "object") return;
+        if (!BAR_FIX_DATES.has(session.date)) return;
+        if (!Array.isArray(session.exercises)) return;
+        session.exercises.forEach((exercise) => {
+          if (!exercise || typeof exercise !== "object") return;
+          if (!needsBarbellWeight(session.date, exercise.n)) return;
+          if (!Array.isArray(exercise.sets)) return;
+          exercise.sets.forEach((set) => {
+            if (!set || typeof set !== "object") return;
+            const weight = Number(set.w);
+            if (!Number.isFinite(weight) || weight <= 0) return;
+            set.w = Math.round((weight + BAR_WEIGHT_KG) * 100) / 100;
+            changed = true;
+          });
+        });
+      });
+
+      if (changed && !writeJson(STORAGE_KEYS.sessions, parsedSessions)) return;
+      writeStorage(BAR_FIX_FLAG_V1, "1");
+    } catch (error) {
+      // Leave the flag unset so the fix can retry on a later launch.
     }
   }
 
@@ -3293,6 +3370,7 @@
   }
 
   function boot() {
+    fixImportedBarWeightsV1();
     importHistoryV1();
     loadData();
     setInitialRoute();
