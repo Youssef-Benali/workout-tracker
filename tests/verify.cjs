@@ -33,7 +33,8 @@ async function main() {
     const {
       viewport = { width: 390, height: 844 },
       colorScheme = "light",
-      serviceWorkers = "allow"
+      serviceWorkers = "allow",
+      startPath = "/"
     } = options;
     const context = await browser.newContext({
       viewport,
@@ -52,9 +53,9 @@ async function main() {
     page.on("pageerror", (error) => {
       errors.push(`pageerror: ${error.message}`);
     });
-    await page.goto(baseUrl, { waitUntil: "domcontentloaded" });
+    await page.goto(`${baseUrl}${startPath}`, { waitUntil: "domcontentloaded" });
     await page.waitForSelector(".screen");
-    return { context, page, errors, baseUrl, options };
+    return { context, page, errors, baseUrl, options, startPath };
   }
 
   async function scenario(name, fn, options = {}) {
@@ -1196,6 +1197,53 @@ async function main() {
       });
     },
     { viewport: { width: 360, height: 740 } }
+  );
+
+  await scenario(
+    "App, assets and service worker work from a GitHub Pages sub-path",
+    async ({ page, baseUrl }) => {
+      assert.equal(await page.evaluate(() => location.pathname), "/workout/");
+      assert.equal(await page.locator(".program-card").count(), 2);
+      assert.equal(
+        await page.locator('link[rel="manifest"]').getAttribute("href"),
+        "./manifest.webmanifest"
+      );
+      const resolvedManifest = await page.evaluate(() => {
+        const link = document.querySelector('link[rel="manifest"]');
+        return link ? link.href : null;
+      });
+      assert.equal(resolvedManifest, `${baseUrl}/workout/manifest.webmanifest`);
+      const manifestResponse = await page.request.get(resolvedManifest);
+      assert.equal(manifestResponse.status(), 200);
+      const manifest = await manifestResponse.json();
+      assert.equal(manifest.start_url, "./");
+      assert.equal(manifest.scope, "./");
+
+      const serviceWorker = await page.evaluate(async () => {
+        if (!("serviceWorker" in navigator)) return null;
+        const registration = await Promise.race([
+          navigator.serviceWorker.ready,
+          new Promise((resolve) => setTimeout(() => resolve(null), 10000))
+        ]);
+        if (!registration) return null;
+        return {
+          scope: registration.scope,
+          scriptUrl: registration.active ? registration.active.scriptURL : null
+        };
+      });
+      assert.ok(serviceWorker, "Service worker should register under a sub-path");
+      assert.ok(serviceWorker.scope.endsWith("/workout/"));
+      assert.ok(serviceWorker.scriptUrl.endsWith("/workout/sw.js"));
+
+      await page.getByLabel("Open workout", { exact: true }).click();
+      await page.waitForSelector(".screen-work-idle");
+      await page.getByRole("button", { name: "Start Upper workout" }).click();
+      await page.waitForSelector(".screen-work-active");
+      await page.reload({ waitUntil: "domcontentloaded" });
+      await page.waitForSelector(".screen-work-active");
+      assert.equal(await page.locator(".work-exercise-name").textContent(), "Bench");
+    },
+    { startPath: "/workout/" }
   );
 
   /* ---------------------------------------------------------------------

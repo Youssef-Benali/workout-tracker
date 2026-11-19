@@ -49,5 +49,15 @@
 
 ## M9 — Release
 - [x] Final regression run
-- [ ] All work committed to `main`
-- [ ] Push attempted and result recorded
+- [x] All work committed to `main`
+- [x] Push attempted and result recorded
+
+Push result: local commits only. `git push -u origin main` failed because no remote was supplied with the brief:
+
+```text
+fatal: 'origin' does not appear to be a git repository
+fatal: Could not read from remote repository.
+
+Please make sure you have the correct access rights
+and the repository exists.
+```

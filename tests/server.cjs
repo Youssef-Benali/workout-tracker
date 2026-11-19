@@ -30,6 +30,13 @@ function createStaticServer() {
         response.end("Bad request");
         return;
       }
+      // Also expose the app under a GitHub Pages-style sub-path so relative
+      // URL and service worker scope assumptions can be tested for real.
+      if (pathname === "/workout/" || pathname === "/workout") {
+        pathname = "/index.html";
+      } else if (pathname.startsWith("/workout/")) {
+        pathname = pathname.slice("/workout".length);
+      }
       if (pathname === "/" || pathname === "") {
         pathname = "/index.html";
       }

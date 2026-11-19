@@ -4,7 +4,8 @@ The product brief is the source of truth. Where it leaves a detail open, this fi
 
 ## Repository and hosting
 
-- The brief contains the literal placeholder `<PASTE REPO URL>`; no GitHub repository URL was supplied. The working directory was not a Git repository, so it was initialized on branch `main`. No remote can be configured or pushed to until a real repository URL exists. Local commits are made throughout.
+- The brief contains the literal placeholder `<PASTE REPO URL>`; no GitHub repository URL was supplied. The working directory was not a Git repository, so it was initialized on branch `main`. No remote could be configured. A push was attempted at release time and failed: `fatal: 'origin' does not appear to be a git repository`. The complete app and commits are therefore local until a real remote is provided.
+- The static app was also tested mounted at a `/workout/` sub-path to match the intended GitHub Pages URL shape: relative assets, manifest URLs and service worker scope all resolve correctly.
 - The app is completely static. It is designed to live at a GitHub Pages sub-path and every app URL is relative (`./`).
 - Test tooling is not part of the deployed app and does not introduce a runtime dependency.
 
