@@ -75,6 +75,7 @@
   let editor = null;
   let editorUi = null;
   let workUi = null;
+  let inlineExerciseEditor = null;
   let calendar = null;
   let currentView = null;
   let timerInterval = null;
@@ -1146,6 +1147,7 @@
     clearDialTap();
     editorUi = null;
     workUi = null;
+    inlineExerciseEditor = null;
 
     let nextView = routeFromLocation();
     const previousView = currentView;
@@ -2932,6 +2934,213 @@
     return screen;
   }
 
+  /* -----------------------------------------------------------------------
+     Inline exercise editing
+     ----------------------------------------------------------------------- */
+
+  function closeInlineExerciseEditor() {
+    if (!inlineExerciseEditor) return;
+    const { row, editor } = inlineExerciseEditor;
+    inlineExerciseEditor = null;
+    if (editor && editor.parentNode) editor.parentNode.removeChild(editor);
+    if (row) {
+      row.setAttribute("aria-expanded", "false");
+      row.removeAttribute("aria-controls");
+    }
+  }
+
+  function toggleInlineExerciseEditor(row, createEditor) {
+    if (inlineExerciseEditor && inlineExerciseEditor.row === row) {
+      closeInlineExerciseEditor();
+      return;
+    }
+    closeInlineExerciseEditor();
+    const editor = createEditor();
+    if (!editor) return;
+    const editorId = makeId("exercise-editor");
+    editor.id = editorId;
+    row.after(editor);
+    row.setAttribute("aria-expanded", "true");
+    row.setAttribute("aria-controls", editorId);
+    inlineExerciseEditor = { row, editor };
+    const nameInput = editor.querySelector(".exercise-edit-name");
+    if (nameInput) nameInput.focus();
+  }
+
+  function renameExerciseEverywhere(oldName, newName) {
+    sessions.forEach((session) => {
+      session.exercises.forEach((exercise) => {
+        if (exercise.n === oldName) exercise.n = newName;
+      });
+    });
+    programs.forEach((program) => {
+      program.items.forEach((item) => {
+        if (item.n === oldName) item.n = newName;
+      });
+    });
+    persistSessions();
+    persistPrograms();
+  }
+
+  function renameConflictsInSessions(oldName, newName) {
+    return sessions.some((session) => {
+      const hasOldName = session.exercises.some(
+        (exercise) => exercise.n === oldName
+      );
+      if (!hasOldName) return false;
+      return session.exercises.some((exercise) => exercise.n === newName);
+    });
+  }
+
+  function createInlineExerciseEditor(options) {
+    const { label, name, sets, onSave } = options;
+    const editor = el("div", {
+      class: "exercise-editor",
+      role: "group",
+      "aria-label": label
+    });
+    const nameInput = el("input", {
+      class: "exercise-edit-name",
+      type: "text",
+      value: name,
+      "aria-label": "Exercise name",
+      autocomplete: "off",
+      spellcheck: "false",
+      maxlength: "70"
+    });
+    editor.append(nameInput);
+
+    const weightInputs = [];
+    if (Array.isArray(sets) && sets.some((set) => Number(set.w) > 0)) {
+      sets.forEach((set, index) => {
+        const input = el("input", {
+          class: "exercise-edit-weight",
+          type: "number",
+          inputmode: "decimal",
+          min: "0",
+          max: "1000",
+          step: "0.01",
+          placeholder: "Body weight"
+        });
+        if (Number(set.w) > 0) input.value = formatNumber(set.w);
+        const setRow = el("label", { class: "exercise-edit-set" });
+        setRow.append(el("span", { text: `Set ${index + 1}` }), input);
+        weightInputs.push(input);
+        editor.append(setRow);
+      });
+    }
+
+    const error = el("p", {
+      class: "exercise-edit-error",
+      role: "alert",
+      hidden: true
+    });
+    editor.append(error);
+
+    const actions = el("div", { class: "exercise-edit-actions" });
+    const cancelButton = el("button", {
+      class: "btn btn-secondary",
+      type: "button",
+      text: "Cancel"
+    });
+    const doneButton = el("button", {
+      class: "btn btn-primary",
+      type: "button",
+      text: "Done"
+    });
+    actions.append(cancelButton, doneButton);
+    editor.append(actions);
+
+    const showError = (message) => {
+      error.textContent = message;
+      error.hidden = false;
+      nameInput.focus();
+    };
+
+    const cancel = () => {
+      const row = inlineExerciseEditor ? inlineExerciseEditor.row : null;
+      closeInlineExerciseEditor();
+      if (row) row.focus();
+    };
+
+    const save = () => {
+      const newName = nameInput.value.trim();
+      if (!newName) {
+        showError("Name required");
+        return;
+      }
+      const failure = onSave(
+        newName,
+        weightInputs.map((input) => normalizeWeight(input.value))
+      );
+      if (failure) {
+        showError(failure);
+        return;
+      }
+      closeInlineExerciseEditor();
+      renderRoute();
+    };
+
+    doneButton.addEventListener("click", save);
+    cancelButton.addEventListener("click", cancel);
+    editor.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        cancel();
+        return;
+      }
+      if (event.key !== "Enter") return;
+      if (event.target instanceof HTMLButtonElement) return;
+      event.preventDefault();
+      save();
+    });
+
+    return editor;
+  }
+
+  function createSessionExerciseEditor(session, exercise, exerciseIndex) {
+    const oldName = exercise.n;
+    return createInlineExerciseEditor({
+      label: `Edit ${oldName}`,
+      name: oldName,
+      sets: exercise.sets,
+      onSave: (newName, weights) => {
+        if (newName !== oldName) {
+          const duplicate = session.exercises.some(
+            (entry, index) =>
+              index !== exerciseIndex && String(entry.n).trim() === newName
+          );
+          if (duplicate) return "Name already used";
+        }
+        weights.forEach((weight, index) => {
+          exercise.sets[index].w = weight;
+        });
+        if (newName !== oldName) {
+          renameExerciseEverywhere(oldName, newName);
+        } else {
+          persistSessions();
+        }
+        return null;
+      }
+    });
+  }
+
+  function createProgressExerciseEditor(entry) {
+    return createInlineExerciseEditor({
+      label: `Rename ${entry.name}`,
+      name: entry.name,
+      sets: null,
+      onSave: (newName) => {
+        if (newName === entry.name) return null;
+        if (renameConflictsInSessions(entry.name, newName)) {
+          return "Name already used";
+        }
+        renameExerciseEverywhere(entry.name, newName);
+        return null;
+      }
+    });
+  }
+
   function createSessionCard(session) {
     const setCount = totalLoggedSets(session);
     const card = el("article", { class: "session-card" });
@@ -2975,9 +3184,9 @@
     );
 
     const body = el("div", { class: "session-body", id: bodyId, hidden: true });
-    const loggedExercises = session.exercises.filter(
-      (exercise) => exercise.sets && exercise.sets.length > 0
-    );
+    const loggedExercises = session.exercises
+      .map((exercise, index) => ({ exercise, index }))
+      .filter(({ exercise }) => exercise.sets && exercise.sets.length > 0);
     if (loggedExercises.length === 0) {
       body.append(
         el("p", {
@@ -2986,13 +3195,18 @@
         })
       );
     } else {
-      loggedExercises.forEach((exercise) => {
+      loggedExercises.forEach(({ exercise, index: exerciseIndex }) => {
         const weights = exercise.sets.map((set) => Number(set.w) || 0);
         const bestWeight = Math.max(...weights);
         const reps = exercise.sets.map((set) => Number(set.r));
+        const editable = !session.inProgress;
         const row = el(
-          "div",
-          { class: "session-exercise" },
+          editable ? "button" : "div",
+          {
+            class: `session-exercise${editable ? " is-editable" : ""}`,
+            type: editable ? "button" : undefined,
+            "aria-expanded": editable ? "false" : undefined
+          },
           el("span", { class: "session-ex-name", text: exercise.n }),
           el(
             "span",
@@ -3010,6 +3224,20 @@
             })
           )
         );
+        if (editable) {
+          row.append(
+            el(
+              "span",
+              { class: "session-ex-edit", "aria-hidden": "true" },
+              makeIcon("pencil")
+            )
+          );
+          row.addEventListener("click", () => {
+            toggleInlineExerciseEditor(row, () =>
+              createSessionExerciseEditor(session, exercise, exerciseIndex)
+            );
+          });
+        }
         body.append(row);
       });
     }
@@ -3018,6 +3246,7 @@
       const expanded = header.getAttribute("aria-expanded") === "true";
       header.setAttribute("aria-expanded", expanded ? "false" : "true");
       body.hidden = expanded;
+      if (expanded) closeInlineExerciseEditor();
     });
 
     card.append(header, body);
@@ -3239,8 +3468,8 @@
     } else {
       const list = el("div", { class: "progress-list" });
       entries.forEach((entry) => {
-        const metrics = el("div", { class: "progress-metrics" });
-        const latest = el("div", { class: "progress-latest" });
+        const metrics = el("span", { class: "progress-metrics" });
+        const latest = el("span", { class: "progress-latest" });
         latest.append(document.createTextNode(formatNumber(entry.latest)));
         latest.append(
           el("span", { class: "progress-latest-unit", text: entry.unit })
@@ -3250,15 +3479,28 @@
           text: formatDelta(entry.delta)
         });
         metrics.append(latest, delta);
-        list.append(
+        const row = el(
+          "button",
+          {
+            class: "progress-row is-editable",
+            type: "button",
+            "aria-expanded": "false"
+          },
+          el("span", { class: "progress-name", text: entry.name }),
+          createSparkline(entry.values),
+          metrics,
           el(
-            "div",
-            { class: "progress-row" },
-            el("p", { class: "progress-name", text: entry.name }),
-            createSparkline(entry.values),
-            metrics
+            "span",
+            { class: "progress-edit", "aria-hidden": "true" },
+            makeIcon("pencil")
           )
         );
+        row.addEventListener("click", () => {
+          toggleInlineExerciseEditor(row, () =>
+            createProgressExerciseEditor(entry)
+          );
+        });
+        list.append(row);
       });
       card.append(list);
     }

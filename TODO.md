@@ -62,6 +62,12 @@
 - [x] One-time `barFixV1` migration for already imported sessions
 - [x] Cache bumped to `wt-v4`
 
+## M12 — Inline exercise editing
+- [x] Tappable exercise rows in session cards and on Progress
+- [x] Inline name and per-set weight editor with validation
+- [x] Global renames across sessions and programs
+- [x] Cache bumped to `wt-v5`
+
 Push result: local commits only. `git push -u origin main` failed because no remote was supplied with the brief:
 
 ```text

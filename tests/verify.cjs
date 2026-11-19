@@ -172,6 +172,48 @@ async function main() {
     return page.evaluate(() => Object.keys(localStorage).sort());
   }
 
+  async function openCalendar(page) {
+    await page.getByLabel("Open training calendar", { exact: true }).click();
+    await page.waitForSelector(".screen-calendar");
+  }
+
+  async function selectCalendarDay(page, day) {
+    await page
+      .locator(".day:not(.is-blank)", {
+        has: page.locator(".day-number", { hasText: new RegExp(`^${day}$`) })
+      })
+      .click();
+    await page.waitForTimeout(20);
+  }
+
+  async function openCalendarSession(page, day) {
+    await selectCalendarDay(page, day);
+    await page.locator(".session-head").first().click();
+    await page.waitForTimeout(20);
+  }
+
+  function exactTextPattern(value) {
+    return new RegExp(
+      `^${String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`
+    );
+  }
+
+  function calendarExerciseRow(page, name) {
+    return page.locator(".session-exercise.is-editable", {
+      has: page.locator(".session-ex-name", {
+        hasText: exactTextPattern(name)
+      })
+    });
+  }
+
+  function progressExerciseRow(page, name) {
+    return page.locator(".progress-row.is-editable", {
+      has: page.locator(".progress-name", {
+        hasText: exactTextPattern(name)
+      })
+    });
+  }
+
   /* ---------------------------------------------------------------------
      1. First run
      --------------------------------------------------------------------- */
@@ -1359,6 +1401,312 @@ async function main() {
     assert.equal(sessions[0].id, "notes-session");
   });
 
+  /* ---------------------------------------------------------------------
+     8b. Inline exercise editing
+     --------------------------------------------------------------------- */
+
+  await scenario("Calendar exercise rows edit weights inline and keep other sessions unchanged", async ({ page }) => {
+    await openCalendar(page);
+    await openCalendarSession(page, "10");
+
+    const row = calendarExerciseRow(page, "Squat");
+    assert.equal(await row.count(), 1);
+    const rowMetrics = await row.evaluate((element) => {
+      const style = getComputedStyle(element);
+      const rect = element.getBoundingClientRect();
+      return {
+        cursor: style.cursor,
+        minHeight: style.minHeight,
+        height: rect.height,
+        hasPencil: Boolean(element.querySelector(".session-ex-edit svg"))
+      };
+    });
+    assert.equal(rowMetrics.cursor, "pointer");
+    assert.equal(rowMetrics.minHeight, "44px");
+    assert.ok(rowMetrics.height >= 43.5);
+    assert.equal(rowMetrics.hasPencil, true);
+
+    await row.click();
+    await page.waitForSelector(".exercise-editor");
+    assert.equal(await page.locator(".exercise-editor").count(), 1);
+    assert.equal(await page.locator(".exercise-edit-name").inputValue(), "Squat");
+    assert.equal(await page.locator(".exercise-edit-weight").count(), 1);
+    assert.equal(
+      sanitize(await page.locator(".exercise-edit-set span").first().textContent()),
+      "Set 1"
+    );
+    assert.equal(await page.locator(".exercise-edit-weight").first().inputValue(), "80");
+    assert.equal(
+      await page
+        .locator(".exercise-edit-name")
+        .evaluate((element) => getComputedStyle(element).fontSize),
+      "16px"
+    );
+    assert.equal(await row.getAttribute("aria-expanded"), "true");
+    assert.equal(await page.evaluate(() => location.hash), "#log");
+    assert.equal(
+      await page.evaluate(
+        () => document.activeElement === document.querySelector(".exercise-edit-name")
+      ),
+      true
+    );
+
+    await page.locator(".exercise-edit-weight").first().fill("82.5");
+    await page.locator(".exercise-edit-name").press("Enter");
+    await page.waitForFunction(() => !document.querySelector(".exercise-editor"));
+    await page.waitForTimeout(40);
+
+    const stored = await readStore(page, "wt.v1.sessions");
+    const byDate = new Map(stored.map((session) => [session.date, session]));
+    const squatOn = (date) =>
+      byDate.get(date).exercises.find((exercise) => exercise.n === "Squat");
+    assert.deepEqual(squatOn("2026-11-10").sets, [
+      { r: 0, w: 82.5, t: "00:00" }
+    ]);
+    assert.deepEqual(squatOn("2026-11-19").sets.map((set) => set.w), [75, 75, 75]);
+    assert.deepEqual(squatOn("2026-11-14").sets.map((set) => set.w), [85, 85, 85]);
+    assert.deepEqual(squatOn("2026-11-05").sets.map((set) => set.w), [35]);
+    assert.equal(stored.length, 7);
+
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.waitForSelector(".screen-calendar");
+    await openCalendarSession(page, "10");
+    assert.match(
+      sanitize(await page.locator(".session-body").first().textContent()),
+      /82\.5 kg/
+    );
+    await selectCalendarDay(page, "19");
+    await page.locator(".session-head").first().click();
+    assert.match(
+      sanitize(await page.locator(".session-body").first().textContent()),
+      /75 kg/
+    );
+  }, { importHistory: true });
+
+  await scenario("Renaming an exercise updates all sessions, the program and Progress", async ({ page }) => {
+    await openCalendar(page);
+    await openCalendarSession(page, "10");
+
+    await calendarExerciseRow(page, "Calve").click();
+    await page.waitForSelector(".exercise-editor");
+    assert.equal(await page.locator(".exercise-edit-name").inputValue(), "Calve");
+    await page.locator(".exercise-edit-name").fill("Calves");
+    await page.getByRole("button", { name: "Done", exact: true }).click();
+    await page.waitForFunction(() => !document.querySelector(".exercise-editor"));
+    await page.waitForTimeout(40);
+
+    const sessions = await readStore(page, "wt.v1.sessions");
+    assert.equal(
+      sessions.some((session) =>
+        session.exercises.some((exercise) => exercise.n === "Calve")
+      ),
+      false
+    );
+    assert.deepEqual(
+      sessions
+        .filter((session) =>
+          session.exercises.some((exercise) => exercise.n === "Calves")
+        )
+        .map((session) => session.date),
+      ["2026-11-05", "2026-11-10", "2026-11-14", "2026-11-19"]
+    );
+    const ten = sessions.find((session) => session.date === "2026-11-10");
+    assert.deepEqual(
+      ten.exercises.find((exercise) => exercise.n === "Calves").sets.map((set) => [set.w, set.r]),
+      [[20, 0]]
+    );
+
+    const programs = await readStore(page, "wt.v1.programs");
+    assert.deepEqual(
+      programs[1].items.map((item) => item.n),
+      ["Squat", "Leg curl", "Calves", "Abs", "Elevation (lombaire)"]
+    );
+    assert.equal(programs[0].items.some((item) => item.n === "Calve"), false);
+    assert.equal(programs[0].items.some((item) => item.n === "Calves"), false);
+
+    await page.locator(".back-button").click();
+    await page.waitForSelector(".screen-list");
+    await page.getByLabel("Open progress", { exact: true }).click();
+    await page.waitForSelector(".screen-progress");
+    let names = await page
+      .locator(".progress-name")
+      .evaluateAll((elements) => elements.map((element) => element.textContent));
+    assert.equal(names.includes("Calves"), true);
+    assert.equal(names.includes("Calve"), false);
+
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.waitForSelector(".screen-progress");
+    names = await page
+      .locator(".progress-name")
+      .evaluateAll((elements) => elements.map((element) => element.textContent));
+    assert.equal(names.includes("Calves"), true);
+    assert.equal(names.includes("Calve"), false);
+  }, { importHistory: true });
+
+  await scenario("Exercise editor validates names, closes cleanly and omits body-weight inputs", async ({ page }) => {
+    await openCalendar(page);
+    await openCalendarSession(page, "10");
+
+    const calveRow = calendarExerciseRow(page, "Calve");
+    const squatRow = calendarExerciseRow(page, "Squat");
+    await calveRow.click();
+    await page.waitForSelector(".exercise-editor");
+    assert.equal(await page.locator(".exercise-editor").count(), 1);
+
+    await squatRow.click();
+    await page.waitForTimeout(20);
+    assert.equal(await page.locator(".exercise-editor").count(), 1);
+    assert.equal(await page.locator(".exercise-edit-name").inputValue(), "Squat");
+    assert.equal(await calveRow.getAttribute("aria-expanded"), "false");
+    assert.equal(await squatRow.getAttribute("aria-expanded"), "true");
+
+    await page.locator(".exercise-edit-name").fill("");
+    await page.getByRole("button", { name: "Done", exact: true }).click();
+    assert.equal(await page.locator(".exercise-editor").count(), 1);
+    assert.equal(await page.locator(".exercise-edit-error").isVisible(), true);
+    assert.equal(
+      sanitize(await page.locator(".exercise-edit-error").textContent()),
+      "Name required"
+    );
+
+    await page.locator(".exercise-edit-name").fill("Calve");
+    await page.getByRole("button", { name: "Done", exact: true }).click();
+    assert.equal(await page.locator(".exercise-editor").count(), 1);
+    assert.equal(await page.locator(".exercise-edit-error").isVisible(), true);
+    assert.equal(
+      sanitize(await page.locator(".exercise-edit-error").textContent()),
+      "Name already used"
+    );
+
+    const sessions = await readStore(page, "wt.v1.sessions");
+    const ten = sessions.find((session) => session.date === "2026-11-10");
+    assert.equal(
+      ten.exercises.find((exercise) => exercise.n === "Squat").sets[0].w,
+      80
+    );
+    assert.equal(
+      ten.exercises.some((exercise) => exercise.n === "Calve"),
+      true
+    );
+
+    await page.locator(".exercise-edit-name").press("Escape");
+    await page.waitForTimeout(20);
+    assert.equal(await page.locator(".exercise-editor").count(), 0);
+    assert.equal(await squatRow.getAttribute("aria-expanded"), "false");
+
+    await selectCalendarDay(page, "5");
+    await page.locator(".session-head").first().click();
+    const absRow = calendarExerciseRow(page, "Abs");
+    await absRow.click();
+    await page.waitForSelector(".exercise-editor");
+    assert.equal(await page.locator(".exercise-edit-weight").count(), 0);
+    assert.equal(await page.locator(".exercise-edit-name").inputValue(), "Abs");
+    await page.getByRole("button", { name: "Cancel", exact: true }).click();
+    assert.equal(await page.locator(".exercise-editor").count(), 0);
+  }, { importHistory: true });
+
+  await scenario("Progress exercise rows rename globally without weight inputs", async ({ page }) => {
+    await page.getByLabel("Open progress", { exact: true }).click();
+    await page.waitForSelector(".screen-progress");
+
+    const row = progressExerciseRow(page, "Calve");
+    assert.equal(await row.count(), 1);
+    assert.equal(
+      await row.evaluate((element) => getComputedStyle(element).cursor),
+      "pointer"
+    );
+    await row.click();
+    await page.waitForSelector(".exercise-editor");
+    assert.equal(await page.locator(".exercise-editor").count(), 1);
+    assert.equal(await page.locator(".exercise-edit-weight").count(), 0);
+    assert.equal(await page.locator(".exercise-editor input").count(), 1);
+    assert.equal(await page.locator(".exercise-edit-name").inputValue(), "Calve");
+
+    await page.locator(".exercise-edit-name").fill("Abs");
+    await page.locator(".exercise-edit-name").press("Enter");
+    assert.equal(await page.locator(".exercise-edit-error").isVisible(), true);
+    assert.equal(
+      sanitize(await page.locator(".exercise-edit-error").textContent()),
+      "Name already used"
+    );
+
+    await page.locator(".exercise-edit-name").fill("Calves");
+    await page.locator(".exercise-edit-name").press("Enter");
+    await page.waitForFunction(() => !document.querySelector(".exercise-editor"));
+    await page.waitForTimeout(40);
+    assert.equal(await progressExerciseRow(page, "Calves").count(), 1);
+    assert.equal(await progressExerciseRow(page, "Calve").count(), 0);
+
+    const sessions = await readStore(page, "wt.v1.sessions");
+    assert.equal(
+      sessions.some((session) =>
+        session.exercises.some((exercise) => exercise.n === "Calve")
+      ),
+      false
+    );
+    assert.equal(
+      sessions.filter((session) =>
+        session.exercises.some((exercise) => exercise.n === "Calves")
+      ).length,
+      4
+    );
+    const programs = await readStore(page, "wt.v1.programs");
+    assert.equal(programs[1].items.some((item) => item.n === "Calves"), true);
+    assert.equal(programs[1].items.some((item) => item.n === "Calve"), false);
+  }, { importHistory: true });
+
+  await scenario("The app shell and exercise editing work offline", async ({ page, context }) => {
+    await page.evaluate(async () => {
+      if (!("serviceWorker" in navigator)) return;
+      await navigator.serviceWorker.ready;
+    });
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.waitForSelector(".screen-list");
+    await page.waitForFunction(
+      () => navigator.serviceWorker && navigator.serviceWorker.controller !== null
+    );
+    await page.evaluate(async () => {
+      try {
+        await document.fonts.ready;
+      } catch (error) {
+        // System font fallbacks keep the app usable.
+      }
+    });
+
+    await context.setOffline(true);
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.waitForSelector(".screen-list");
+    await openCalendar(page);
+    assert.equal(
+      sanitize(await page.locator(".month-sub").textContent()),
+      "7 trained days"
+    );
+
+    await openCalendarSession(page, "10");
+    await calendarExerciseRow(page, "Squat").click();
+    await page.waitForSelector(".exercise-editor");
+    await page.locator(".exercise-edit-weight").first().fill("82.5");
+    await page.locator(".exercise-edit-name").press("Enter");
+    await page.waitForFunction(() => !document.querySelector(".exercise-editor"));
+    await page.waitForTimeout(40);
+    const stored = await readStore(page, "wt.v1.sessions");
+    assert.equal(
+      stored
+        .find((session) => session.date === "2026-11-10")
+        .exercises.find((exercise) => exercise.n === "Squat").sets[0].w,
+      82.5
+    );
+
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.waitForSelector(".screen-calendar");
+    await openCalendarSession(page, "10");
+    assert.match(
+      sanitize(await page.locator(".session-body").first().textContent()),
+      /82\.5 kg/
+    );
+    await context.setOffline(false);
+  }, { importHistory: true });
+
   await scenario("Screen Wake Lock is requested while active and released", async ({ page }) => {
     await startUpperFromList(page);
     await page.addInitScript(() => {
@@ -1900,14 +2248,14 @@ async function main() {
     assert.ok(swInfo.scriptUrl.endsWith("/sw.js"));
     assert.ok(swInfo.scope.endsWith("/"));
     assert.ok(swInfo.cacheNames.some((name) => name.startsWith("workout-tracker-shell-")));
-    assert.ok(swInfo.cacheNames.includes("workout-tracker-shell-wt-v4"));
+    assert.ok(swInfo.cacheNames.includes("workout-tracker-shell-wt-v5"));
 
     const appSource = fs.readFileSync(path.join(ROOT, "app.js"), "utf8");
     assert.equal(/toISOString\s*\(/.test(appSource), false);
     assert.equal(/\b(?:alert|confirm|prompt)\s*\(/.test(appSource), false);
     assert.ok(appSource.includes('"wt.v1.programs"'));
     const swSource = fs.readFileSync(path.join(ROOT, "sw.js"), "utf8");
-    assert.match(swSource, /const CACHE_VERSION = "wt-v4";/);
+    assert.match(swSource, /const CACHE_VERSION = "wt-v5";/);
     assert.match(swSource, /skipWaiting/);
     assert.match(swSource, /clients\.claim/);
     assert.match(swSource, /caches\.delete/);

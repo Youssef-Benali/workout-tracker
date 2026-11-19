@@ -26,6 +26,9 @@ step, no framework and no runtime dependencies.
   into a compact card like a session.
 - **Progress sparklines** using best-set weight (or total reps for body-weight
   work) with a delta from the first session.
+- **Inline exercise editing** on saved calendar sessions and Progress: rename an
+  exercise everywhere or adjust that session's set weights without leaving the
+  page.
 - **Automatic dark mode**, reduced-motion support, keyboard reordering and
   pointer drag reordering.
 - **Installable and offline-capable** through a web app manifest and service
@@ -54,13 +57,13 @@ name must change so installed copies receive the new files:
 
 1. Make and test your changes to the static files.
 2. In `sw.js`, change **only this line** to a new unique value, for example
-   `const CACHE_VERSION = "wt-v4";` → `const CACHE_VERSION = "wt-v5";`
+   `const CACHE_VERSION = "wt-v5";` → `const CACHE_VERSION = "wt-v6";`
 3. Commit and push to `main`, and let GitHub Pages finish deploying.
 4. Open the installed app twice with internet available: the first launch
    checks for and installs the new worker, the second launch serves the newly
    cached shell.
 5. Optionally verify the new version in Chrome DevTools → Application →
-   Service Workers / Cache Storage (`workout-tracker-shell-wt-v5`).
+   Service Workers / Cache Storage (`workout-tracker-shell-wt-v6`).
 
 Bumping the version is enough: the worker deletes superseded
 `workout-tracker-*` caches during activation and claims open clients. Because of
@@ -95,9 +98,10 @@ node tests/capture-screenshots.cjs
 `tests/verify.cjs` covers first-run seeding and the one-time history import,
 the one-time barbell-weight migration, editor changes, pointer and keyboard
 reordering, workout logging, timer states, calendar and progress behaviour,
-reload persistence, the 360 × 740 layout, icons, the manifest and service worker
-registration. `tests/capture-screenshots.cjs` writes the six screens in both
-colour schemes to `tests/screenshots/`.
+inline exercise editing, offline loading, reload persistence, the 360 × 740
+layout, icons, the manifest and service worker registration.
+`tests/capture-screenshots.cjs` writes the six screens in both colour schemes to
+`tests/screenshots/`.
 
 ## Files
 

@@ -48,6 +48,13 @@ The product brief is the source of truth. Where it leaves a detail open, this fi
 - A calendar session card shows one weight per exercise: the highest weight logged in that exercise for that session. Its reps line lists the logged reps in set order.
 - Notes are stored separately in the `notes` key as `{ "YYYY-MM-DD": "text" }`, using the same local date format as sessions. Every day can have a note, including days with no session. Blank notes delete that day's entry, and the key is removed once no entries remain. The notes card renders folded after any calendar render, including after changing day or month.
 
+## Inline exercise editing
+
+- Saved calendar session rows and Progress rows open an editor directly beneath the tapped row. In-progress workout cards stay read-only because they are not saved sessions.
+- A weighted exercise gets one weight input per set; an exercise whose sets all weigh 0 is treated as body weight and gets no weight inputs. Weight edits change only that session.
+- Renaming updates every past session and every program item with the exact old name. An empty name shows "Name required"; a name already present in the same calendar session shows "Name already used" and saves nothing. From Progress the duplicate check covers every session that contains the old name.
+- Only one editor is open at a time. Done saves and re-renders, Enter saves, Escape and Cancel close without saving, and tapping the row again closes it.
+
 ## Visual and accessibility details
 
 - All dynamic user strings are rendered with DOM text nodes and attributes. The only `innerHTML` assignments use closed, hard-coded SVG icon and illustration maps; no user text is ever interpolated into markup.
