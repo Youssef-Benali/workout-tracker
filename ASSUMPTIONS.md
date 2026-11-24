@@ -50,10 +50,10 @@ The product brief is the source of truth. Where it leaves a detail open, this fi
 
 ## Inline exercise editing
 
-- Saved calendar session rows and Progress rows open an editor directly beneath the tapped row. In-progress workout cards stay read-only because they are not saved sessions.
-- A weighted exercise gets one weight input per set; an exercise whose sets all weigh 0 is treated as body weight and gets no weight inputs. Weight edits change only that session.
+- Every saved calendar session exercise row and Progress row opens an editor directly beneath the tapped row. In-progress workout cards stay read-only because they are not saved sessions.
+- Every set in a saved session gets one weight input in kilograms and one reps input. Empty weight and empty reps are stored as 0. "Body weight" is only the row label shown for a zero/exercise weight; it never disables the weight inputs. An exercise with no sets shows one empty set row, and a set is created from it when weight or reps is entered. A new set uses the existing `{ w, r, t: "00:00" }` schema; existing timestamps and other exercises are preserved. Weight and reps edits change only that session.
 - Renaming updates every past session and every program item with the exact old name. An empty name shows "Name required"; a name already present in the same calendar session shows "Name already used" and saves nothing. From Progress the duplicate check covers every session that contains the old name.
-- Only one editor is open at a time. Done saves and re-renders, Enter saves, Escape and Cancel close without saving, and tapping the row again closes it.
+- Only one editor is open at a time. Done saves, re-renders and keeps that session card open, Enter saves, Escape and Cancel close without saving, and tapping the row again closes it.
 
 ## Visual and accessibility details
 

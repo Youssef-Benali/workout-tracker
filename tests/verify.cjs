@@ -1431,11 +1431,19 @@ async function main() {
     assert.equal(await page.locator(".exercise-editor").count(), 1);
     assert.equal(await page.locator(".exercise-edit-name").inputValue(), "Squat");
     assert.equal(await page.locator(".exercise-edit-weight").count(), 1);
+    assert.equal(await page.locator(".exercise-edit-reps").count(), 1);
     assert.equal(
-      sanitize(await page.locator(".exercise-edit-set span").first().textContent()),
+      sanitize(await page.locator(".exercise-edit-set-label").first().textContent()),
       "Set 1"
     );
+    assert.deepEqual(
+      await page
+        .locator(".exercise-edit-unit")
+        .evaluateAll((elements) => elements.map((element) => element.textContent)),
+      ["kg", "reps"]
+    );
     assert.equal(await page.locator(".exercise-edit-weight").first().inputValue(), "80");
+    assert.equal(await page.locator(".exercise-edit-reps").first().inputValue(), "");
     assert.equal(
       await page
         .locator(".exercise-edit-name")
@@ -1455,6 +1463,11 @@ async function main() {
     await page.locator(".exercise-edit-name").press("Enter");
     await page.waitForFunction(() => !document.querySelector(".exercise-editor"));
     await page.waitForTimeout(40);
+    assert.equal(await page.locator(".session-body").first().isVisible(), true);
+    assert.match(
+      sanitize(await page.locator(".session-body").first().textContent()),
+      /82\.5 kg/
+    );
 
     const stored = await readStore(page, "wt.v1.sessions");
     const byDate = new Map(stored.map((session) => [session.date, session]));
@@ -1543,7 +1556,7 @@ async function main() {
     assert.equal(names.includes("Calve"), false);
   }, { importHistory: true });
 
-  await scenario("Exercise editor validates names, closes cleanly and omits body-weight inputs", async ({ page }) => {
+  await scenario("Exercise editor validates names and edits body-weight rows cleanly", async ({ page }) => {
     await openCalendar(page);
     await openCalendarSession(page, "10");
 
@@ -1597,12 +1610,214 @@ async function main() {
     await selectCalendarDay(page, "5");
     await page.locator(".session-head").first().click();
     const absRow = calendarExerciseRow(page, "Abs");
+    assert.match(sanitize(await absRow.textContent()), /Body weight/);
     await absRow.click();
     await page.waitForSelector(".exercise-editor");
-    assert.equal(await page.locator(".exercise-edit-weight").count(), 0);
+    assert.equal(await page.locator(".exercise-edit-weight").count(), 1);
+    assert.equal(await page.locator(".exercise-edit-reps").count(), 1);
+    assert.equal(await page.locator(".exercise-edit-weight").inputValue(), "");
+    assert.equal(await page.locator(".exercise-edit-reps").inputValue(), "");
     assert.equal(await page.locator(".exercise-edit-name").inputValue(), "Abs");
     await page.getByRole("button", { name: "Cancel", exact: true }).click();
     assert.equal(await page.locator(".exercise-editor").count(), 0);
+  }, { importHistory: true });
+
+  await scenario("Body-weight Bench rows can be given a weight and reps", async ({ page }) => {
+    await page.evaluate(() => {
+      const sessions = JSON.parse(localStorage.getItem("wt.v1.sessions"));
+      const bench = sessions
+        .find((session) => session.date === "2026-11-07")
+        .exercises.find((exercise) => exercise.n === "Bench");
+      bench.sets = [{ r: 0, w: 0, t: "00:00" }];
+      localStorage.setItem("wt.v1.sessions", JSON.stringify(sessions));
+      location.hash = "#log";
+    });
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.waitForSelector(".screen-calendar");
+    await openCalendarSession(page, "7");
+
+    const row = calendarExerciseRow(page, "Bench");
+    assert.equal(await row.count(), 1);
+    assert.match(sanitize(await row.textContent()), /Body weight/);
+    await row.click();
+    await page.waitForSelector(".exercise-editor");
+    assert.equal(await page.locator(".exercise-edit-weight").count(), 1);
+    assert.equal(await page.locator(".exercise-edit-reps").count(), 1);
+    assert.equal(await page.locator(".exercise-edit-weight").inputValue(), "");
+    assert.equal(await page.locator(".exercise-edit-reps").inputValue(), "");
+
+    await page.locator(".exercise-edit-weight").fill("92.5");
+    await page.locator(".exercise-edit-reps").fill("6");
+    await page.getByRole("button", { name: "Done", exact: true }).click();
+    await page.waitForFunction(() => !document.querySelector(".exercise-editor"));
+    await page.waitForTimeout(40);
+    assert.equal(await page.locator(".session-body").first().isVisible(), true);
+    const bodyText = sanitize(
+      await page.locator(".session-body").first().textContent()
+    );
+    assert.match(bodyText, /92\.5 kg/);
+    assert.match(bodyText, /6 reps/);
+
+    let sessions = await readStore(page, "wt.v1.sessions");
+    let bench = sessions
+      .find((session) => session.date === "2026-11-07")
+      .exercises.find((exercise) => exercise.n === "Bench");
+    assert.deepEqual(bench.sets, [{ r: 6, w: 92.5, t: "00:00" }]);
+    assert.deepEqual(
+      sessions
+        .find((session) => session.date === "2026-11-17")
+        .exercises.find((exercise) => exercise.n === "Bench")
+        .sets.map((set) => [set.w, set.r]),
+      [
+        [72.5, 8],
+        [72.5, 6],
+        [72.5, 6]
+      ]
+    );
+
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.waitForSelector(".screen-calendar");
+    await openCalendarSession(page, "7");
+    assert.match(
+      sanitize(await page.locator(".session-body").first().textContent()),
+      /92\.5 kg/
+    );
+    assert.match(
+      sanitize(await page.locator(".session-body").first().textContent()),
+      /6 reps/
+    );
+  }, { importHistory: true });
+
+  await scenario("Editing reps leaves the session weights unchanged", async ({ page }) => {
+    await openCalendar(page);
+    await openCalendarSession(page, "19");
+    await calendarExerciseRow(page, "Squat").click();
+    await page.waitForSelector(".exercise-editor");
+    assert.deepEqual(
+      await page
+        .locator(".exercise-edit-weight")
+        .evaluateAll((elements) => elements.map((element) => element.value)),
+      ["75", "75", "75"]
+    );
+    assert.deepEqual(
+      await page
+        .locator(".exercise-edit-reps")
+        .evaluateAll((elements) => elements.map((element) => element.value)),
+      ["7", "6", "7"]
+    );
+
+    await page.locator(".exercise-edit-reps").first().fill("9");
+    await page.getByRole("button", { name: "Done", exact: true }).click();
+    await page.waitForFunction(() => !document.querySelector(".exercise-editor"));
+    await page.waitForTimeout(40);
+    assert.equal(await page.locator(".session-body").first().isVisible(), true);
+    assert.match(
+      sanitize(await page.locator(".session-body").first().textContent()),
+      /9, 6, 7 reps/
+    );
+
+    const sessions = await readStore(page, "wt.v1.sessions");
+    const squat = sessions
+      .find((session) => session.date === "2026-11-19")
+      .exercises.find((exercise) => exercise.n === "Squat");
+    assert.deepEqual(
+      squat.sets.map((set) => [set.w, set.r]),
+      [
+        [75, 9],
+        [75, 6],
+        [75, 7]
+      ]
+    );
+    assert.deepEqual(
+      sessions
+        .find((session) => session.date === "2026-11-14")
+        .exercises.find((exercise) => exercise.n === "Squat")
+        .sets.map((set) => [set.w, set.r]),
+      [
+        [85, 6],
+        [85, 6],
+        [85, 6]
+      ]
+    );
+  }, { importHistory: true });
+
+  await scenario("Empty weight and reps are accepted and show body weight", async ({ page }) => {
+    await openCalendar(page);
+    await openCalendarSession(page, "5");
+    await calendarExerciseRow(page, "Squat").click();
+    await page.waitForSelector(".exercise-editor");
+    assert.equal(await page.locator(".exercise-edit-weight").inputValue(), "35");
+    assert.equal(await page.locator(".exercise-edit-reps").inputValue(), "2");
+    await page.locator(".exercise-edit-weight").fill("");
+    await page.locator(".exercise-edit-reps").fill("");
+    await page.getByRole("button", { name: "Done", exact: true }).click();
+    await page.waitForFunction(() => !document.querySelector(".exercise-editor"));
+    await page.waitForTimeout(40);
+    assert.equal(await page.locator(".session-body").first().isVisible(), true);
+    assert.match(
+      sanitize(await page.locator(".session-body").first().textContent()),
+      /Body weight/
+    );
+
+    const sessions = await readStore(page, "wt.v1.sessions");
+    const squat = sessions
+      .find((session) => session.date === "2026-11-05")
+      .exercises.find((exercise) => exercise.n === "Squat");
+    assert.deepEqual(squat.sets, [{ r: 0, w: 0, t: "00:00" }]);
+    assert.deepEqual(
+      sessions
+        .find((session) => session.date === "2026-11-19")
+        .exercises.find((exercise) => exercise.n === "Squat")
+        .sets.map((set) => set.w),
+      [75, 75, 75]
+    );
+  }, { importHistory: true });
+
+  await scenario("An exercise with no sets shows one empty set row and can be filled", async ({ page }) => {
+    await page.evaluate(() => {
+      const sessions = JSON.parse(localStorage.getItem("wt.v1.sessions"));
+      const day5 = sessions.find(
+        (session) => session.date === "2026-11-05"
+      );
+      day5.exercises.push({ n: "Face pull", sets: [] });
+      localStorage.setItem("wt.v1.sessions", JSON.stringify(sessions));
+      location.hash = "#log";
+    });
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.waitForSelector(".screen-calendar");
+    await openCalendarSession(page, "5");
+
+    const row = calendarExerciseRow(page, "Face pull");
+    assert.equal(await row.count(), 1);
+    assert.match(sanitize(await row.textContent()), /Body weight/);
+    await row.click();
+    await page.waitForSelector(".exercise-editor");
+    assert.equal(await page.locator(".exercise-edit-set").count(), 1);
+    assert.equal(await page.locator(".exercise-edit-weight").count(), 1);
+    assert.equal(await page.locator(".exercise-edit-reps").count(), 1);
+    assert.equal(await page.locator(".exercise-edit-weight").inputValue(), "");
+    assert.equal(await page.locator(".exercise-edit-reps").inputValue(), "");
+
+    await page.locator(".exercise-edit-weight").fill("42.5");
+    await page.locator(".exercise-edit-reps").fill("10");
+    await page.getByRole("button", { name: "Done", exact: true }).click();
+    await page.waitForFunction(() => !document.querySelector(".exercise-editor"));
+    await page.waitForTimeout(40);
+    assert.equal(await page.locator(".session-body").first().isVisible(), true);
+    assert.match(
+      sanitize(await page.locator(".session-body").first().textContent()),
+      /42\.5 kg/
+    );
+    assert.match(
+      sanitize(await page.locator(".session-body").first().textContent()),
+      /10 reps/
+    );
+
+    const sessions = await readStore(page, "wt.v1.sessions");
+    const facePull = sessions
+      .find((session) => session.date === "2026-11-05")
+      .exercises.find((exercise) => exercise.n === "Face pull");
+    assert.deepEqual(facePull.sets, [{ r: 10, w: 42.5, t: "00:00" }]);
   }, { importHistory: true });
 
   await scenario("Progress exercise rows rename globally without weight inputs", async ({ page }) => {
@@ -1619,6 +1834,7 @@ async function main() {
     await page.waitForSelector(".exercise-editor");
     assert.equal(await page.locator(".exercise-editor").count(), 1);
     assert.equal(await page.locator(".exercise-edit-weight").count(), 0);
+    assert.equal(await page.locator(".exercise-edit-reps").count(), 0);
     assert.equal(await page.locator(".exercise-editor input").count(), 1);
     assert.equal(await page.locator(".exercise-edit-name").inputValue(), "Calve");
 
@@ -2248,14 +2464,14 @@ async function main() {
     assert.ok(swInfo.scriptUrl.endsWith("/sw.js"));
     assert.ok(swInfo.scope.endsWith("/"));
     assert.ok(swInfo.cacheNames.some((name) => name.startsWith("workout-tracker-shell-")));
-    assert.ok(swInfo.cacheNames.includes("workout-tracker-shell-wt-v5"));
+    assert.ok(swInfo.cacheNames.includes("workout-tracker-shell-wt-v6"));
 
     const appSource = fs.readFileSync(path.join(ROOT, "app.js"), "utf8");
     assert.equal(/toISOString\s*\(/.test(appSource), false);
     assert.equal(/\b(?:alert|confirm|prompt)\s*\(/.test(appSource), false);
     assert.ok(appSource.includes('"wt.v1.programs"'));
     const swSource = fs.readFileSync(path.join(ROOT, "sw.js"), "utf8");
-    assert.match(swSource, /const CACHE_VERSION = "wt-v5";/);
+    assert.match(swSource, /const CACHE_VERSION = "wt-v6";/);
     assert.match(swSource, /skipWaiting/);
     assert.match(swSource, /clients\.claim/);
     assert.match(swSource, /caches\.delete/);

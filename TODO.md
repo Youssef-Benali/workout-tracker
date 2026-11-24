@@ -68,6 +68,11 @@
 - [x] Global renames across sessions and programs
 - [x] Cache bumped to `wt-v5`
 
+## M13 — Complete per-set editor
+- [x] Remove the body-weight editing lock and add per-set weight + reps inputs
+- [x] Empty exercises show one editable set row
+- [x] Cache bumped to `wt-v6`
+
 Push result: local commits only. `git push -u origin main` failed because no remote was supplied with the brief:
 
 ```text

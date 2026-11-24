@@ -76,6 +76,7 @@
   let editorUi = null;
   let workUi = null;
   let inlineExerciseEditor = null;
+  let pendingExpandedSessionId = null;
   let calendar = null;
   let currentView = null;
   let timerInterval = null;
@@ -110,6 +111,13 @@
     const number = Number(value);
     if (!Number.isFinite(number)) return 1;
     return clampInt(number, 1, 999);
+  }
+
+  function normalizeSessionReps(value) {
+    if (value === "" || value === null || value === undefined) return 0;
+    const number = Number(value);
+    if (!Number.isFinite(number) || number <= 0) return 0;
+    return clamp(Math.round(number), 1, 999);
   }
 
   function formatNumber(value) {
@@ -1204,6 +1212,7 @@
     }
 
     appEl.replaceChildren(screen);
+    pendingExpandedSessionId = null;
     document.title = `${VIEW_TITLES[nextView] || APP_NAME} — ${APP_NAME}`;
 
     if (nextView === "work" && activeWorkout) {
@@ -3010,22 +3019,60 @@
     });
     editor.append(nameInput);
 
-    const weightInputs = [];
-    if (Array.isArray(sets) && sets.some((set) => Number(set.w) > 0)) {
-      sets.forEach((set, index) => {
-        const input = el("input", {
+    const setInputs = [];
+    if (Array.isArray(sets)) {
+      const editableSets = sets.length > 0 ? sets : [null];
+      editableSets.forEach((set, index) => {
+        const weightInput = el("input", {
           class: "exercise-edit-weight",
           type: "number",
           inputmode: "decimal",
           min: "0",
           max: "1000",
           step: "0.01",
-          placeholder: "Body weight"
+          placeholder: "—",
+          "aria-label": `Set ${index + 1} weight in kilograms`
         });
-        if (Number(set.w) > 0) input.value = formatNumber(set.w);
-        const setRow = el("label", { class: "exercise-edit-set" });
-        setRow.append(el("span", { text: `Set ${index + 1}` }), input);
-        weightInputs.push(input);
+        const repsInput = el("input", {
+          class: "exercise-edit-reps",
+          type: "number",
+          inputmode: "numeric",
+          min: "0",
+          max: "999",
+          step: "1",
+          placeholder: "—",
+          "aria-label": `Set ${index + 1} reps`
+        });
+        if (set) {
+          const weight = Number(set.w);
+          if (Number.isFinite(weight) && weight > 0) {
+            weightInput.value = formatNumber(weight);
+          }
+          const reps = Number(set.r);
+          if (Number.isFinite(reps) && reps > 0) {
+            repsInput.value = String(Math.round(reps));
+          }
+        }
+        setInputs.push({ weightInput, repsInput });
+        const setRow = el("div", { class: "exercise-edit-set" });
+        setRow.append(
+          el("span", {
+            class: "exercise-edit-set-label",
+            text: `Set ${index + 1}`
+          }),
+          el(
+            "label",
+            { class: "exercise-edit-field" },
+            weightInput,
+            el("span", { class: "exercise-edit-unit", text: "kg" })
+          ),
+          el(
+            "label",
+            { class: "exercise-edit-field" },
+            repsInput,
+            el("span", { class: "exercise-edit-unit", text: "reps" })
+          )
+        );
         editor.append(setRow);
       });
     }
@@ -3071,7 +3118,10 @@
       }
       const failure = onSave(
         newName,
-        weightInputs.map((input) => normalizeWeight(input.value))
+        setInputs.map(({ weightInput, repsInput }) => ({
+          w: normalizeWeight(weightInput.value),
+          r: normalizeSessionReps(repsInput.value)
+        }))
       );
       if (failure) {
         showError(failure);
@@ -3100,11 +3150,12 @@
 
   function createSessionExerciseEditor(session, exercise, exerciseIndex) {
     const oldName = exercise.n;
+    const existingSets = Array.isArray(exercise.sets) ? exercise.sets : [];
     return createInlineExerciseEditor({
       label: `Edit ${oldName}`,
       name: oldName,
-      sets: exercise.sets,
-      onSave: (newName, weights) => {
+      sets: existingSets,
+      onSave: (newName, setValues) => {
         if (newName !== oldName) {
           const duplicate = session.exercises.some(
             (entry, index) =>
@@ -3112,14 +3163,29 @@
           );
           if (duplicate) return "Name already used";
         }
-        weights.forEach((weight, index) => {
-          exercise.sets[index].w = weight;
-        });
+        if (existingSets.length === 0) {
+          const firstSet = setValues[0];
+          if (firstSet && (firstSet.w > 0 || firstSet.r > 0)) {
+            exercise.sets = [
+              { w: firstSet.w, r: firstSet.r, t: "00:00" }
+            ];
+          } else if (!Array.isArray(exercise.sets)) {
+            exercise.sets = [];
+          }
+        } else {
+          existingSets.forEach((set, index) => {
+            const values = setValues[index];
+            if (!values) return;
+            set.w = values.w;
+            set.r = values.r;
+          });
+        }
         if (newName !== oldName) {
           renameExerciseEverywhere(oldName, newName);
         } else {
           persistSessions();
         }
+        pendingExpandedSessionId = session.id;
         return null;
       }
     });
@@ -3184,10 +3250,15 @@
     );
 
     const body = el("div", { class: "session-body", id: bodyId, hidden: true });
-    const loggedExercises = session.exercises
-      .map((exercise, index) => ({ exercise, index }))
-      .filter(({ exercise }) => exercise.sets && exercise.sets.length > 0);
-    if (loggedExercises.length === 0) {
+    const exerciseEntries = (
+      Array.isArray(session.exercises) ? session.exercises : []
+    ).map((exercise, index) => ({ exercise, index }));
+    const visibleExercises = session.inProgress
+      ? exerciseEntries.filter(
+          ({ exercise }) => exercise.sets && exercise.sets.length > 0
+        )
+      : exerciseEntries;
+    if (visibleExercises.length === 0) {
       body.append(
         el("p", {
           class: "session-exercises-empty",
@@ -3195,10 +3266,11 @@
         })
       );
     } else {
-      loggedExercises.forEach(({ exercise, index: exerciseIndex }) => {
-        const weights = exercise.sets.map((set) => Number(set.w) || 0);
-        const bestWeight = Math.max(...weights);
-        const reps = exercise.sets.map((set) => Number(set.r));
+      visibleExercises.forEach(({ exercise, index: exerciseIndex }) => {
+        const sets = Array.isArray(exercise.sets) ? exercise.sets : [];
+        const weights = sets.map((set) => Number(set.w) || 0);
+        const bestWeight = weights.length ? Math.max(...weights) : 0;
+        const reps = sets.map((set) => Number(set.r));
         const editable = !session.inProgress;
         const row = el(
           editable ? "button" : "div",
@@ -3240,6 +3312,12 @@
         }
         body.append(row);
       });
+    }
+
+    if (!session.inProgress && pendingExpandedSessionId === session.id) {
+      pendingExpandedSessionId = null;
+      header.setAttribute("aria-expanded", "true");
+      body.hidden = false;
     }
 
     header.addEventListener("click", () => {
